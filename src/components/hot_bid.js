@@ -5,13 +5,6 @@ import * as API from '../adapter/api';
 import BalanceUtil from '../common/balance_util';
 import AssetUtil from '../common/asset_util';
 import CONST from '../globals/constants';
-
-import hb_01 from '../img/home/hb-01.jpg';
-import hb_02 from '../img/home/hb-02.jpg';
-import hb_03 from '../img/home/hb-03.jpg';
-import hb_04 from '../img/home/hb-04.jpg';
-import icon_avatar_01 from '../img/common/icon-avatar-01.png';
-import icon_fire from '../img/common/icon-fire.png';
 import config from '../globals/config';
 import { withTranslation } from 'react-i18next';
 
@@ -43,7 +36,7 @@ class HotBid extends React.Component {
 
     componentDidUpdate() {
         var script = document.createElement('script');
-        script.src = '../../js/page/home.js';
+        script.src = './js/page/home.js';
         script.async = true;
         document.body.appendChild(script);
     }
@@ -82,7 +75,7 @@ class HotBid extends React.Component {
 
                                         return (
                                             <div className="swiper-slide">
-                                                <div className="hb-item" onClick={() => document.location="/item/" + item.id}>
+                                                <div className="hb-item" onClick={() => window.location = config.host_url + "/item/" + item.id}>
                                                     <div className="hb-item-figure">
                                                         <img src={JSON.parse(item.metadata).url} alt="" />
                                                         <div className="hb-item-figure-overlay">
@@ -96,7 +89,7 @@ class HotBid extends React.Component {
                                                     </div>
                                                     <div className="ht-item-infos info-block-tsb">
                                                         <div className="ttl">
-                                                            {item.token_name}
+                                                            <p className="name">{item.token_name}</p>
                                                             <p className="ttl-mark eth-mark">{item.type == CONST.protocol_type.ERC721? "#" + item.token_id: item.owned_cnt + " / " + item.total_supply}</p>
                                                         </div>
                                                         <div className="stock">
@@ -111,7 +104,7 @@ class HotBid extends React.Component {
                                                                     })
                                                                 }
                                                             </div>
-                                                            <p className="stock-txt">{item.bids.length} in Stock</p>
+                                                            <p className="stock-txt">{t('in Stock', {count: item.bids.length})}</p>
                                                         </div>
                                                         <div className="bottom">
                                                             <div className="bottom-l">

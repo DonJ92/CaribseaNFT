@@ -12,7 +12,7 @@ class WelCome extends React.Component {
                 <div className="content">
                     <h2 className="top-cta-ttl">
                         <span>{t('CREATE, EXPLORE, & COLLECT DIGITAL ASSET IN CARIBMARS,FINANCE NFT MARKETPLACE')}</span>
-                        {t('DEGITIZE EVERYTHING TO CREATE NEW WORLD')}
+                        {t('DIGITIZE EVERYTHING TO CREATE NEW WORLD')}
                     </h2>
                     {/* <a className="top-cta-link btn" href="/search">Start your search</a> */}
                 </div>

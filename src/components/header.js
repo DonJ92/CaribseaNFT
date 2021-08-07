@@ -12,6 +12,7 @@ import AssetUtil from '../common/asset_util';
 import {AddClass, ChangeClass} from '../js/common';
 import $ from 'jquery';
 import WalletConnectProvider from "@walletconnect/web3-provider";
+import provider_util from '../common/provider_util';
 
 import logo from '../img/logo.png';
 import icon_notice from '../img/icon-notice.svg';
@@ -38,20 +39,33 @@ class Header extends React.Component {
             activities: [],
         };
 
-        if (window.web3 !== undefined) {
-            const web3 = new Web3(Web3.givenProvider);
-            web3.eth.net.getId().then((res) => {
-                this.setState({
-                    chainId: res
-                });
-            });
+        // if (window.web3 !== undefined) {
+        //     const web3 = new Web3(Web3.givenProvider);
+        //     web3.eth.net.getId().then((res) => {
+        //         this.setState({
+        //             chainId: res
+        //         });
+        //     });
     
-            this.getAccounts();
-        }console.log('constructor');
+        //     this.getAccounts();
+        // }console.log('constructor');
+
+        this.getAccounts();
     }
 
-    getAccounts() {
-        const web3 = new Web3(Web3.givenProvider);
+    async getAccounts() {
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+        web3.eth.net.getId().then((res) => {
+            this.setState({
+                chainId: res
+            });
+        });
 
         web3.eth.getAccounts((error,result) => {
             if (error) {
@@ -67,9 +81,11 @@ class Header extends React.Component {
                     });
 
                     web3.eth.getBalance(this.state.selected_address, (err, balance) => {
-                        this.setState({
-                            balance: web3.utils.fromWei(balance, "ether")
-                        });
+                        if (balance != null) {
+                            this.setState({
+                                balance: web3.utils.fromWei(balance, "ether")
+                            });
+                        }
                     });
 
                     API.get_profile(this.state.selected_address)
@@ -97,8 +113,14 @@ class Header extends React.Component {
         })
     }
 
-    Disconnect() {
+    async Disconnect() {
+        if (ls.get(constants.local_storage_key.wallet_type) == constants.wallet_type.WALLETCONNECT) {
+            var provider = provider_util.get_current_provider();
+            await provider.disconnect();
+        }
         ls.set(constants.local_storage_key.KEY_CONNECTED, 0);
+        ls.set(constants.local_storage_key.KEY_WALLET_CONNECT, null);
+        ls.set(constants.local_storage_key.KEY_WALLET_TYPE, 0);
         window.location.reload();
     }
 
@@ -106,9 +128,9 @@ class Header extends React.Component {
         API.get_profile(this.state.selected_address)
         .then((res) => {
             if (res.result == true) {
-                window.location = '/profile/' + this.state.selected_address;
+                window.location = config.host_url + '/profile/' + this.state.selected_address;
             } else {
-                window.location = '/edit_profile';
+                window.location = config.host_url + '/edit_profile';
             }
         })
         .catch((err) => {
@@ -119,9 +141,9 @@ class Header extends React.Component {
     handleUpload() {
         if (this.state.selected_address == null || !this.isConnected()) {
             const { t } = this.props;
-            alert(t('Please connect the wallet.'));
+            alert(t('Please connect the wallet'));
         } else {
-            document.location="/upload/type";
+            document.location=config.host_url + "/upload/type";
         }
     }
 
@@ -134,7 +156,7 @@ class Header extends React.Component {
 
         if (keyword == "") return;
 
-        document.location = "/search_keyword/" + keyword;
+        window.location = config.host_url + "/search_keyword/" + keyword;
     }
 
     onAvatarError(ev){
@@ -149,12 +171,12 @@ class Header extends React.Component {
         const { t } = this.props;
         
         if (window.ethereum == undefined) {
-            alert(t("Please install metamask."));
+            alert(t("Please install metamask"));
             return;
         }
 
         if (parseInt(window.ethereum.chainId) != support_networks.ETHEREUM && parseInt(window.ethereum.chainId) != support_networks.BSC) {
-            alert(t("Please select ethereum or bsc network on metamask."));
+            alert(t("Please select ethereum or bsc network on metamask"));
             return false;
         }
 
@@ -165,27 +187,56 @@ class Header extends React.Component {
             window.location.reload();
         })
         .catch((err) => {
-            ls.clear();
+            ls.set(constants.local_storage_key.KEY_CONNECTED, 0);
+            ls.set(constants.local_storage_key.KEY_WALLET_CONNECT, null);
+            ls.set(constants.local_storage_key.KEY_WALLET_TYPE, 0);
         });
     }
 
     async WCConnect() {
-        //  Create WalletConnect Provider
-        const provider = new WalletConnectProvider({
-          rpc: {
-            3: "https://ropsten.mycustomnode.com",
-            97: "https://data-seed-prebsc-1-s1.binance.org:8545"
-          }
-        });
-
-        provider.onConnect(() => {
-            ls.set(constants.local_storage_key.KEY_CONNECTED, 1);
-            ls.set(constants.local_storage_key.KEY_WALLET_TYPE, constants.wallet_type.WALLETCONNECT);
-            document.location.reload();
-        });
+        try {
+            //  Create WalletConnect Provider
+            const provider = new WalletConnectProvider({
+                infuraId: "27e484dcd9e3efcfd25a83a78777cdf1",
+                rpc: {
+                    // 1: "https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161",
+                    3: "https://ropsten.mycustomnode.com",
+                    97: "https://data-seed-prebsc-1-s1.binance.org:8545"
+                    }
+            });
     
-        //  Enable session (triggers QR Code modal)
-        await provider.enable();
+            provider.onConnect(() => {
+                ls.set(constants.local_storage_key.KEY_CONNECTED, 1);
+                ls.set(constants.local_storage_key.KEY_WALLET_TYPE, constants.wallet_type.WALLETCONNECT);
+                document.location.reload();
+
+                // const web3 = new Web3(provider);
+                // web3.eth.net.getId().then((res) => {
+                //     this.setState({
+                //         chainId: res
+                //     });
+                // });
+                
+                // this.getAccounts();
+            });
+    
+            provider.onDisconnect(() => {
+                ls.set(constants.local_storage_key.KEY_CONNECTED, 0);
+                ls.set(constants.local_storage_key.KEY_WALLET_TYPE, constants.wallet_type.NONE);
+                document.location.reload();
+            })
+
+            provider.on('error', (err) => {
+                console.log(err);
+
+                provider.disconnect();
+            })
+        
+            //  Enable session (triggers QR Code modal)
+            await provider.enable();
+        } catch (err) {
+            console.log(err);
+        }
     }
 
     handleConnectWalletDesc() {
@@ -231,12 +282,12 @@ class Header extends React.Component {
                 <div className="site-header">
                     <div className="site-header-l">
                         <h1 className="logo">
-                            <a href="/">
+                            <a href={config.host_url + "/"}>
                                 <img src={logo} alt="" />
                             </a>
                         </h1>
                         <div className="shl-links">
-                            <a className="shl-link-item" href="/search"><span>{t('Discover')}</span></a>
+                            <a className="shl-link-item" href={config.host_url + "/search"}><span>{t('Discover')}</span></a>
                             <a className="shl-link-item" href="#"><span>{t('How it work')}</span></a>
                         </div>
                     </div>
@@ -248,18 +299,18 @@ class Header extends React.Component {
                                 <div className="btn-head-search" onClick={() => this.handleSearch()}><i className="fas fa-search"></i></div>
                             </div>
                         </div>
-                        <div class="shr-notice-wrapper">
-                            <div id="btn-show-notice-popup" class="shr-notice">
+                        <div className="shr-notice-wrapper">
+                            <div id="btn-show-notice-popup" className="shr-notice">
                                 <img src={icon_notice} alt="" />
                                 <span className="new" style={is_activity_mark? {}: style_hidden}></span>
                             </div>
-                            <div id="shr-notice-popup" class="shr-notice-popup">
-                                <div class="shr-notice-head">
-                                    <p class="shr-notice-head-ttl">{t('Notification')}</p>
-                                    <a class="btn btn-h40 btn-blue btn-fs-14" href="/activity"><span class="txt">{t('See all')}</span></a>
+                            <div id="shr-notice-popup" className="shr-notice-popup">
+                                <div className="shr-notice-head">
+                                    <p className="shr-notice-head-ttl">{t('Notification')}</p>
+                                    <a className="btn btn-h40 btn-blue btn-fs-14" href={config.host_url + "/activity"}><span className="txt">{t('See all')}</span></a>
                                 </div>
 
-                                <div class="shr-notice-list" style={sample_activities.length != 0? {}: style_hidden}>
+                                <div className="shr-notice-list" style={sample_activities.length != 0? {}: style_hidden}>
                                     {
                                         sample_activities.map((item, index) => {
                                             var title = "";
@@ -271,127 +322,159 @@ class Header extends React.Component {
 
                                             switch(item.activity_type) {
                                                 case CONST.ACTIVITY_TYPE.MINT:
-                                                    title = "Mint";
+                                                    title = t("Mint");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Mint " + item.token_name + " #" + item.token_id + " token.";
+                                                        description = t('Mint ERC721 Token', {token_name: item.token_name, token_id: item.token_id});
                                                     } else {
-                                                        description = "Mint " + item.token_name + " " + item.token_cnt + " token(s).";
+                                                        description = t('Mint ERC1155 Token', {token_name: item.token_name, token_cnt: item.token_cnt});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.TRANSFER:
-                                                    title = "Transfer";
+                                                    title = t("Transfer");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
                                                         if (item.from_address == this.state.address) {
-                                                            description = "Transferred " + item.token_name + " #" + item.token_id + " token to " + item.to_name;
+                                                            description = t('Transferred ERC721 Token to', {token_name: item.token_name, token_id: item.token_id, name: item.to_name});
                                                         } else {
-                                                            description = "Transferred " + item.token_name + " #" + item.token_id + " token from " + item.from_name;
+                                                            description = t('Transferred ERC721 Token from', {token_name: item.token_name, token_id: item.token_id, name: item.from_name});
                                                         }
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
                                                         if (item.from_address == this.state.address) {
-                                                            description = "Transferred " + item.token_name + " " + item.token_cnt + " token(s) to " + item.to_name;
+                                                            description = t('Transferred ERC1155 Token to', {token_name: item.token_name, token_cnt: item.token_cnt, name: item.to_name});
                                                         } else {
-                                                            description = "Transferred " + item.token_name + " " + item.token_cnt + " token(s) from " + item.from_name;
+                                                            description = t('Transferred ERC1155 Token from', {token_name: item.token_name, token_cnt: item.token_cnt, name: item.from_name});
                                                         }
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.LIST_FIXED_SIZE:
-                                                    title = "List for sale";
+                                                    title = t("List for sell");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Listed " + item.token_name + " #" + item.token_id + " token for sale as " + item.amount + " BNB."
+                                                        if (item.chain_id == support_networks.ETHEREUM) {
+                                                            description = t('Listed ERC721 fixed price ETH', {token_name: item.token_name, token_id: item.token_id, amount: item.amount});
+                                                        } else if (item.chain_id == support_networks.BSC) {
+                                                            description = t('Listed ERC721 fixed price BNB', {token_name: item.token_name, token_id: item.token_id, amount: item.amount});
+                                                        }
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "Listed " + item.token_name + " " + item.token_cnt + " token(s) for sale as " + item.amount + " BNB."
+                                                        if (item.chain_id == support_networks.ETHEREUM) {
+                                                            description = t('Listed ERC1155 fixed price ETH', {token_name: item.token_name, token_id: item.token_cnt, amount: item.amount});
+                                                        } else if (item.chain_id == support_networks.BSC) {
+                                                            description = t('Listed ERC1155 fixed price BNB', {token_name: item.token_name, token_id: item.token_cnt, amount: item.amount});
+                                                        }
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.LIST_AUCTION:
-                                                    title = "List for sale";
+                                                    title = t("List for sell");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Listed " + item.token_name + " #" + item.token_id + " token for sale with minimum price as " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + ".";
+                                                        description = t('Listed ERC721 auction', {token_name: item.token_name, token_id: item.token_id, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id)});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "Listed " + item.token_name + " " + item.token_cnt + " token(s) for sale with minimum price as " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + ".";
+                                                        description = t('Listed ERC1155 auction', {token_name: item.token_name, token_cnt: item.token_cnt, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id)});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.UNLIST:
-                                                    title = "Remove from sale";
+                                                    title = t("Remove from sell");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Removed " + item.token_name + " #" + item.token_id + " token from sale.";
+                                                        description = t('Removed ERC721 from sell', {token_name: item.token_name, token_id: item.token_id});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "Removed " + item.token_name + " " + item.token_cnt + " token(s) from sale.";
+                                                        description = t('Removed ERC1155 from sell', {token_name: item.token_name, token_cnt: item.token_cnt});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.BID:
-                                                    title = "BID";
+                                                    title = t("BID");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "BID " + item.token_name + " #" + item.token_id + " token with " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + ".";
+                                                        description = t('BID ERC721', {token_name: item.token_name, token_id: item.token_id, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id)});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "BID " + item.token_name + " " + item.token_cnt + " token(s) with " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + ".";
+                                                        description = t('BID ERC1155', {token_name: item.token_name, token_cnt: item.token_cnt, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id)});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.EXCHANGE:
-                                                    title = "Exchange";
+                                                    title = t("Exchange");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Exchanged " + item.token_name + " #" + item.token_id + " token from the auction with " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + ".";
+                                                        description = t('Exchanged ERC721', {token_name: item.token_name, token_id: item.token_id, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id)});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "Exchanged " + item.token_name + " " + item.token_id + " token(s) from the auction with " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + ".";
+                                                        description = t('Exchanged ERC1155', {token_name: item.token_name, token_cnt: item.token_cnt, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id)});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.BUY:
-                                                    title = "BUY";
+                                                    title = t("BUY");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = item.to_name + " bought " + item.token_name + " #" + item.token_id + " token with " + item.amount + " BNB.";
+                                                        if (item.from_address == this.state.address) {
+                                                            if (item.chain_id == support_networks.ETHEREUM) {
+                                                                description = t('Sold ERC721 token', {token_name: item.token_name, token_id: item.token_id, opponent: item.to_name, amount: item.amount, asset: 'ETH'});
+                                                            } else if (item.chain_id == support_networks.BSC) {
+                                                                description = t('Sold ERC721 token', {token_name: item.token_name, token_id: item.token_id, opponent: item.to_name, amount: item.amount, asset: 'BNB'});
+                                                            }
+                                                        } else {
+                                                            if (item.chain_id == support_networks.ETHEREUM) {
+                                                                description = t('Bought ERC721 token', {token_name: item.token_name, token_id: item.token_id, opponent: item.from_name, amount: item.amount, asset: 'ETH'});
+                                                            } else if (item.chain_id == support_networks.BSC) {
+                                                                description = t('Bought ERC721 token', {token_name: item.token_name, token_id: item.token_id, opponent: item.from_name, amount: item.amount, asset: 'BNB'});
+                                                            }
+                                                        }
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = item.to_name + " bought " + item.token_name + " " + item.token_cnt + " token(s) with " + item.amount + " BNB.";
+                                                        if (item.from_address == this.state.address) {
+                                                            if (item.chain_id == support_networks.ETHEREUM) {
+                                                                description = t('Sold ERC1155 token', {token_name: item.token_name, token_cnt: item.token_cnt, opponent: item.to_name, amount: item.amount, asset: 'ETH'});
+                                                            } else if (item.chain_id == support_networks.BSC) {
+                                                                description = t('Sold ERC1155 token', {token_name: item.token_name, token_cnt: item.token_cnt, opponent: item.to_name, amount: item.amount, asset: 'BNB'});
+                                                            }
+                                                        } else {
+                                                            if (item.chain_id == support_networks.ETHEREUM) {
+                                                                description = t('Bought ERC1155 token', {token_name: item.token_name, token_cnt: item.token_cnt, opponent: item.from_name, amount: item.amount, asset: 'ETH'});
+                                                            } else if (item.chain_id == support_networks.BSC) {
+                                                                description = t('Bought ERC1155 token', {token_name: item.token_name, token_cnt: item.token_cnt, opponent: item.from_name, amount: item.amount, asset: 'BNB'});
+                                                            }
+                                                        }
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.SELF_CANCEL:
-                                                    title = "Cancel bid";
+                                                    title = t("Cancel bid");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Cancelled your bid of " + item.token_name + " #" + item.token_id + " token.";
+                                                        description = t('Cancelled your bid of ERC721', {token_name: item.token_name, token_id: item.token_id});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "Cancelled your bid of " + item.token_name + " " + item.token_cnt + " token(s).";
+                                                        description = t('Cancelled your bid of ERC1155', {token_name: item.token_name, token_cnt: item.token_cnt});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.CANCEL:
-                                                    title = "Acution end";
+                                                    title = t("Auction end");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "The auction of " + item.token_name + " #" + item.token_id + " token ended";
+                                                        description = t("Auction ended ERC721", {token_name: item.token_name, token_id: item.token_id});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "The auction of " + item.token_name + " " + item.token_cnt + " token(s) ended";
+                                                        description = t("Auction ended ERC1155", {token_name: item.token_name, token_cnt: item.token_cnt});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.FOLLOW:
-                                                    title = "Follow";
+                                                    title = t("Follow");
                                                     if (item.from_address == this.state.address) {
-                                                        description = "Started to folllow " + item.to_name;
+                                                        description = t("Started to follow", {name: item.to_name});
                                                         img_src = config.avatar_url + item.to_address + ".png";
                                                     } else {
-                                                        description = "Following from " + item.from_name;
+                                                        description = t("Followed from", {name: item.from_name});
                                                         img_src = config.avatar_url + item.from_address + ".png";
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.UNFOLLOW:
-                                                    title = "Unfollow";
+                                                    title = t("Unfollow");
                                                     if (item.from_address == this.state.address) {
-                                                        description = "Unfollowed " + item.to_name;
+                                                        description = t("Unfollowed from me", {name: item.to_name});
                                                         img_src = config.avatar_url + item.to_address + ".png";
                                                     } else {
-                                                        description = item.from_name + " unfollowed " + item.from_name;
+                                                        description = t("Unfollowed to me", {name: item.from_name});
                                                         img_src = config.avatar_url + item.from_address + ".png";
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.STAKE:
-                                                    title = "Stake";
-                                                    description = "Staked " + item.token_name + " #" + item.token_id + " token.";
+                                                    title = t("Stake");
+                                                    description = t("Staked", {token_name: item.token_name, token_id: item.token_id});
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.REVOKE:
-                                                    title = "Revoke";
-                                                    description = "Revoked " + item.token_name + " #" + item.token_id + " token.";
+                                                    title = t("Revoke");
+                                                    description = t("Revoked", {token_name: item.token_name, token_id: item.token_id});
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.BURN:
-                                                    title = "Burn";
+                                                    title = t("Burn");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description  = "Burned " + item.token_name + " #" + item.token_id + " token.";
+                                                        description = t('Burned ERC721', {token_name: item.token_name, token_id: item.token_id});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description  = "Burned " + item.token_name + " " + item.token_cnt + " token(s).";
+                                                        description = t('Burned ERC1155', {token_name: item.token_name, token_cnt: item.token_cnt});
                                                     }
                                                     break;
                                             }
@@ -411,7 +494,7 @@ class Header extends React.Component {
                                         })
                                     }
                                 </div>
-                                <div class="shr-notice-list" style={sample_activities.length == 0? {}: style_hidden}>
+                                <div className="shr-notice-list" style={sample_activities.length == 0? {}: style_hidden}>
                                     There's no notification.
                                 </div>
                             </div>
@@ -420,29 +503,29 @@ class Header extends React.Component {
                             <a className="btn btn-blue btn-h48 btn-mr12 btn-upload" onClick={() => this.handleUpload()}><span>{t('Upload')}</span></a>
                             <div>
                                 <a className="btn btn-h48" onClick={() => this.handleConnectWallet()} style={ls.get(constants.local_storage_key.KEY_CONNECTED) == null || ls.get(constants.local_storage_key.KEY_CONNECTED) == 0 || this.state.selected_address == null || !this.isConnected()? style_none: style_hidden}><span>{t('Connect Wallet')}</span></a>
-                                <div class="btn-show-user-profile-popup-wrapper" style={ls.get(constants.local_storage_key.KEY_CONNECTED) == 1 && this.state.selected_address != null && this.isConnected()? style_none: style_hidden}>
+                                <div className="btn-show-user-profile-popup-wrapper" style={ls.get(constants.local_storage_key.KEY_CONNECTED) == 1 && this.state.selected_address != null && this.isConnected()? style_none: style_hidden}>
                                     <div id="btn-show-user-profile-popup">
-                                        <span class="ico"><img src={config.avatar_url + (this.state.profile == null || this.state.profile.has_avatar == 0? "default": this.state.profile.address) + ".png"} onError={this.onAvatarError} alt="" /></span>
-                                        <span class="balance">{parseFloat(this.state.balance).toFixed(4)}</span>
-                                        <span class="unit">{this.state.chainId == support_networks.ETHEREUM? "ETH": "BNB"}</span>
+                                        <span className="ico"><img src={config.avatar_url + (this.state.profile == null || this.state.profile.has_avatar == 0? "default": this.state.profile.address) + ".png"} onError={this.onAvatarError} alt="" /></span>
+                                        <span className="balance">{parseFloat(this.state.balance).toFixed(4)}</span>
+                                        <span className="unit">{this.state.chainId == support_networks.ETHEREUM? "ETH": "BNB"}</span>
                                     </div>
-                                    <div id="shr-user-profile-popup" class="shr-user-profile-popup">
-                                        <p class="shr-upp-name">{this.state.profile == null? "XXX": this.state.profile.name}</p>
-                                        <p class="shr-upp-token">
-                                            {window.ethereum == null || window.ethereum.selectedAddress == null? 'XXX': window.ethereum.selectedAddress.slice(0,14) + '...' + window.ethereum.selectedAddress.slice(38,42)}
-                                            <span><img src={icon_ball} alt="" onClick={() => navigator.clipboard.writeText(window.ethereum.selectedAddress)}/></span>
+                                    <div id="shr-user-profile-popup" className="shr-user-profile-popup">
+                                        <p className="shr-upp-name">{this.state.profile == null? "XXX": this.state.profile.name}</p>
+                                        <p className="shr-upp-token">
+                                            {this.state.selected_address == null? 'XXX': this.state.selected_address.slice(0,14) + '...' + this.state.selected_address.slice(38,42)}
+                                            <span><img src={icon_ball} alt="" onClick={() => navigator.clipboard.writeText(this.state.selected_address)}/></span>
                                         </p>
-                                        <div class="shr-upp-balance">
-                                            <div class="shr-upp-balance-info">
-                                                <div class="shr-upp-balance-info-icon">
+                                        <div className="shr-upp-balance">
+                                            <div className="shr-upp-balance-info">
+                                                <div className="shr-upp-balance-info-icon">
                                                     <img src={icon_bnb} alt="" />
                                                 </div>
-                                                <div class="shr-upp-balance-info-desc">
-                                                    <p class="shr-upp-balance-info-ttl-sub">{t('Balance')}</p>
-                                                    <p class="shr-upp-balance-info-ttl">{BalanceUtil.format_balance(this.state.balance, this.state.chainId == support_networks.ETHEREUM? "ETH": 'BNB')}</p>
+                                                <div className="shr-upp-balance-info-desc">
+                                                    <p className="shr-upp-balance-info-ttl-sub">{t('Balance')}</p>
+                                                    <p className="shr-upp-balance-info-ttl">{BalanceUtil.format_balance(this.state.balance, this.state.chainId == support_networks.ETHEREUM? "ETH": 'BNB')}</p>
                                                 </div>
                                             </div>
-                                            <a class="shr-upp-balance-link btn btn-h32 btn-full btn-fs-14" onClick={() => document.location = config.blockexplorer_url + "address/" + (window.ethereum == null || window.ethereum.selectedAddress == null? 'XXX': window.ethereum.selectedAddress)}><span class="txt">{t('See on')} {window.ethereum == undefined || window.ethereum.chainId == support_networks.ETHEREUM? "Ethereum": "BSC"}</span></a>
+                                            <a className="shr-upp-balance-link btn btn-h32 btn-full btn-fs-14" onClick={() => document.location = config.blockexplorer_url + "address/" + this.state.selected_address}><span className="txt">{t('See on')} {window.ethereum == undefined || window.ethereum.chainId == support_networks.ETHEREUM? "Ethereum": "BSC"}</span></a>
                                         </div>
                                         <a className="shr-upp-link-page" onClick={() => this.Profile()}>
                                             <span className="ico"><i className="far fa-user"></i></span>
@@ -465,14 +548,14 @@ class Header extends React.Component {
                             </div>
                         </div>
                     </div>
-                    <div class="hamburger" id="hamburger">
+                    <div className="hamburger" id="hamburger">
                         <span></span>
                         <span></span>
-                        <div id="shr-menu-popup" class="shr-menu-popup">
-                            <a className="shr-upp-link-page" onClick={() => document.location = "/search"}>
+                        <div id="shr-menu-popup" className="shr-menu-popup">
+                            <a className="shr-upp-link-page" onClick={() => window.location = config.host_url + "/search"}>
                                 {t('Discover')}
                             </a>
-                            <a className="shr-upp-link-page shr-upp-link-upload" onClick={() => document.location = "#"}>
+                            <a className="shr-upp-link-page shr-upp-link-upload" onClick={() => window.location = config.host_url + "#"}>
                                 {t('How it work')}
                             </a>
                             <a className="shr-upp-link-page shr-upp-link-upload" onClick={() => this.handleUpload()}>

@@ -1,5 +1,4 @@
 import React from 'react';
-import ReactDOM from 'react-dom';
 import '../styles/style.css';
 import {AddClass, ChangeClass} from '../js/common';
 import Web3 from 'web3';
@@ -9,6 +8,7 @@ import AssetUtil from '../common/asset_util';
 import $ from 'jquery';
 
 import CONST, { protocol_type } from '../globals/constants';
+import provider_util from '../common/provider_util';
 
 import ball from '../img/profile/ball.png';
 import config from '../globals/config';
@@ -39,14 +39,23 @@ class Profile extends React.Component {
 
     componentDidMount() {
         this.showLoading();
-
+        this.getMyAccount();
         this.getAccounts();
         this.getTokenOwned();
         this.getTokenCreated();
         this.getTokenLikes();
         this.getFollowings();
+    }
 
-        const web3 = new Web3(Web3.givenProvider);
+    async getMyAccount() {
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         web3.eth.getAccounts((error,result) => {
             if (error) {
                 console.log(error);
@@ -119,7 +128,7 @@ class Profile extends React.Component {
             API.get_profile(this.state.address)
             .then((res) => {
                 if (res.result == true) {
-                    window.location = "/profile/" + this.state.address;
+                    window.location = config.host_url + "/profile/" + this.state.address;
                 }
             })
         })
@@ -334,7 +343,7 @@ class Profile extends React.Component {
     }
 
     redirectToItemDetail(contract_address, token_id) {
-        document.location = "/item/" + contract_address + "/" + token_id;
+        window.location = config.host_url + "/item/" + contract_address + "/" + token_id;
     }
 
     onAvatarError(ev){
@@ -410,10 +419,10 @@ class Profile extends React.Component {
     }
 
     componentDidUpdate() {
-        var script = document.createElement('script');
-        script.src = '../../js/page/profile.js';
-        script.async = true;
-        document.body.appendChild(script);
+        // var script = document.createElement('script');
+        // script.src = './js/page/profile.js';
+        // script.async = true;
+        // document.body.appendChild(script);
     }
 
     onAvatarError(ev){
@@ -448,12 +457,12 @@ class Profile extends React.Component {
                 <section id="main-visual" className="main-visual" style={{background : "url('" + config.cover_url + (this.state.profile != null && this.state.profile.has_cover == 1? this.props.address: "default") + ".png')"}}>
                     <div className="content">
                         <div className="edit-row" style={this.state.address == this.props.address? style_none: style_hidden}>
-                            <a className="btn btn-h40 btn-color-gray btn-fs-14 btn-mr16" onClick={this.handleFileSelect}>
+                            <a className="btn btn-h40 btn-color-black btn-fs-11 btn-mr16" onClick={this.handleFileSelect}>
                                 <span className="txt">{t('Edit cover photo')}</span>
                                 <span className="ico"><i className="far fa-image"></i></span>
                             </a>
                             <input id='cover' type='file' accept='image/png' style={{display: 'none'}} onChange={this.onFileChanged}/>
-                            <a className="btn btn-h40 btn-color-gray btn-fs-14" href="/edit_profile">
+                            <a className="btn btn-h40 btn-color-black btn-fs-11" href={config.host_url + "/edit_profile"}>
                                 <span className="txt">{t('Edit profile')}</span>
                                 <span className="ico"><i className="fas fa-pencil-alt"></i></span>
                             </a>
@@ -472,12 +481,12 @@ class Profile extends React.Component {
                                     <h3 className="profile-name">{this.state.profile == null? '...': this.state.profile.name}</h3>
                                     <p className="profile-token">
                                         {this.props.address.slice(0,14) + '...' + this.props.address.slice(38,42)}
-                                        <span><img src={ball} alt="" onClick={() => navigator.clipboard.writeText(window.ethereum.selectedAddress)}/></span>
+                                        <span><img src={ball} alt="" onClick={() => navigator.clipboard.writeText(this.props.address)}/></span>
                                     </p>
                                     <p className="profile-desc">
                                         {this.state.profile == null? '...': this.state.profile.description}
                                     </p>
-                                    <a className="profile-site" href={this.state.profile == null? "#": this.state.profile.url}>
+                                    <a className="profile-site" href={this.state.profile == null? "#": config.host_url + this.state.profile.url}>
                                         <span><i className="fas fa-globe"></i></span>
                                         {this.state.profile == null || this.state.profile.url == ""? '...': this.state.profile.url}
                                     </a>
@@ -504,9 +513,9 @@ class Profile extends React.Component {
                             </div>
 
                             <div className="profile-body">
-                                <div class="profile-tags-wrapper">
+                                <div className="profile-tags-wrapper">
                                     <div className="profile-tags tags-list">
-                                        <a id="tab_onsale" className={this.state.selected_tab == CONST.profile_selected_tab.ON_SALE? "active": ""} onClick={() => this.handleSelectedTab(CONST.profile_selected_tab.ON_SALE)}>{t('On Sale')}</a>
+                                        <a id="tab_onsale" className={this.state.selected_tab == CONST.profile_selected_tab.ON_SALE? "active": ""} onClick={() => this.handleSelectedTab(CONST.profile_selected_tab.ON_SALE)}>{t('On Sell')}</a>
                                         <a id="tab_collectibles" className={this.state.selected_tab == CONST.profile_selected_tab.COLLECTIBLES? "active": ""} onClick={() => this.handleSelectedTab(CONST.profile_selected_tab.COLLECTIBLES)}>{t('Collectibles')}</a>
                                         <a id="tab_created" className={this.state.selected_tab == CONST.profile_selected_tab.CREATED? "active": ""} onClick={() => this.handleSelectedTab(CONST.profile_selected_tab.CREATED)}>{t('Created')}</a>
                                         <a id="tab_likes" className={this.state.selected_tab == CONST.profile_selected_tab.LIKES? "active": ""} onClick={() => this.handleSelectedTab(CONST.profile_selected_tab.LIKES)}>{t('Likes')}</a>
@@ -524,27 +533,27 @@ class Profile extends React.Component {
                                                     var bottom_txt = "";
                                                     var bottom_price = "";
                                                     if (item.token.status == CONST.token_status.FIXED_PRICE) {
-                                                        bottom_txt = "Fixed Price";
+                                                        bottom_txt = t("Fixed Price");
                                                         bottom_price = item.token.price + " BNB";
                                                     } else {
                                                         if (item.bids.length == 0) {
-                                                            bottom_txt = "Minimum Price";
+                                                            bottom_txt = t("Minimum Price");
                                                             bottom_price = item.token.price + " " + AssetUtil.get_asset_by_id(item.token.auction_asset_id);
                                                         } else {
-                                                            bottom_txt = "Highest Bid";
+                                                            bottom_txt = t("Highest Bid");
                                                             bottom_price = item.bids[0].amount + " " + AssetUtil.get_asset_by_id(item.token.auction_asset_id);
                                                         }
                                                     }
 
                                                     return (
-                                                        <div className="profile-infos-item" onClick={() => document.location = "/item/" + item.token.id}>
+                                                        <div className="profile-infos-item" onClick={() => window.location = config.host_url + "/item/" + item.token.id}>
                                                             <div className="profile-infos-figure">
                                                                 <img src={JSON.parse(item.token.metadata).url} alt="" />
                                                             </div>
 
                                                             <div className="profile-infos-bottom info-block-tsb">
                                                                 <div className="ttl">
-                                                                    {item.token.token_name}
+                                                                    <p className="name">{item.token.token_name}</p>
                                                                     <p className="ttl-mark eth-mark">{item.token.type == CONST.protocol_type.ERC721? "#" + item.token.token_id: item.token.owned_cnt + " / " + item.token.total_supply}</p>
                                                                 </div>
                                                                 <div className="stock">
@@ -564,7 +573,7 @@ class Profile extends React.Component {
                                                                             })
                                                                         }
                                                                     </div>
-                                                                    <p className="stock-txt">{item.bids.length} in Stock</p>
+                                                                    <p className="stock-txt">{t('in Stock', {count: item.bids.length})}</p>
                                                                 </div>
                                                                 <div className="bottom">
                                                                     <div className="bottom-l">
@@ -588,14 +597,14 @@ class Profile extends React.Component {
                                         <div className="profile-infos-list">
                                             {this.state.owned_tokens.map((item, index) => {
                                                 const metadata = JSON.parse(item.metadata);
-                                                return (<div className="profile-infos-item" onClick={() => document.location = "/item/" + item.id}>
+                                                return (<div className="profile-infos-item" onClick={() => window.location = config.host_url + "/item/" + item.id}>
                                                     <div className="profile-infos-figure">
                                                         <img src={metadata.url} alt="" />
                                                     </div>
 
                                                     <div className="profile-infos-bottom info-block-tsb">
                                                         <div className="ttl">
-                                                            {item.token_name}
+                                                            <p className="name">{item.token_name}</p>
                                                             <p className="ttl-mark eth-mark">{item.type == CONST.protocol_type.ERC721? "#" + item.token_id: item.owned_cnt + " / " + item.total_supply}</p>
                                                         </div>
                                                         <div className="owner">
@@ -617,14 +626,14 @@ class Profile extends React.Component {
                                         <div className="profile-infos-list">
                                             {this.state.created_tokens.map((item, index) => {
                                                 const metadata = JSON.parse(item.metadata);
-                                                return (<div className="profile-infos-item" onClick={() => document.location = "/item/" + item.id}>
+                                                return (<div className="profile-infos-item" onClick={() => window.location = config.host_url + "/item/" + item.id}>
                                                     <div className="profile-infos-figure">
                                                         <img src={metadata.url} alt="" />
                                                     </div>
 
                                                     <div className="profile-infos-bottom info-block-tsb">
                                                         <div className="ttl">
-                                                            {item.token_name}
+                                                            <p className="name">{item.token_name}</p>
                                                             <p className="ttl-mark eth-mark">{item.type == CONST.protocol_type.ERC721? "#" + item.token_id: item.owned_cnt + " / " + item.total_supply}</p>
                                                         </div>
                                                         <div className="owner">
@@ -646,14 +655,14 @@ class Profile extends React.Component {
                                         <div className="profile-infos-list">
                                             {this.state.likes_tokens.map((item, index) => {
                                                 const metadata = JSON.parse(item.metadata);
-                                                return (<div className="profile-infos-item" onClick={() => document.location = "/item/" + item.id}>
+                                                return (<div className="profile-infos-item" onClick={() => window.location = config.host_url + "/item/" + item.id}>
                                                     <div className="profile-infos-figure">
                                                         <img src={metadata.url} alt="" />
                                                     </div>
 
                                                     <div className="profile-infos-bottom info-block-tsb">
                                                         <div className="ttl">
-                                                            {item.token_name}
+                                                            <p className="name">{item.token_name}</p>
                                                             <p className="ttl-mark eth-mark" style={item.type == CONST.protocol_type.ERC721? {}: style_hidden}>#{item.token_id}</p>
                                                         </div>
                                                         <div className="owner">
@@ -679,7 +688,7 @@ class Profile extends React.Component {
                                                         <div className="profile-infos-follow-row">
                                                             <div className="profile-infos-follow-main">
                                                                 <div className="profile-infos-follow-main-icon">
-                                                                    <img src={config.avatar_url + item.following.address + ".png"}  onError={this.onAvatarError} onClick={() => document.location = "/profile/" + item.following.address} />
+                                                                    <img src={config.avatar_url + item.following.address + ".png"}  onError={this.onAvatarError} onClick={() => window.location = config.host_url + "/profile/" + item.following.address} />
                                                                 </div>
                                                                 <div className="profile-infos-follow-main-infos">
                                                                     <p className="profile-infos-follow-main-infos-name">{item.following.name}</p>
@@ -696,7 +705,7 @@ class Profile extends React.Component {
                                                                             {
                                                                                 item.tokens.map((token, index) => {
                                                                                     return (
-                                                                                        <div className="swiper-slide profile-infos-follow-col" onClick={() => document.location = "/item/" + token.token_contract_id + "/" + token.token_id}>
+                                                                                        <div className="swiper-slide profile-infos-follow-col" onClick={() => window.location = config.host_url + "/item/" + token.token_contract_id + "/" + token.token_id}>
                                                                                             <img src={JSON.parse(token.metadata).url} alt="" />
                                                                                         </div>
                                                                                     )
@@ -721,16 +730,16 @@ class Profile extends React.Component {
                                                         <div className="profile-infos-follow-row">
                                                             <div className="profile-infos-follow-main">
                                                                 <div className="profile-infos-follow-main-icon">
-                                                                    <img src={config.avatar_url + item.follower.address + ".png"} onError={this.onAvatarError} onClick={() => document.location = "/profile/" + item.follower.address} />
+                                                                    <img src={config.avatar_url + item.follower.address + ".png"} onError={this.onAvatarError} onClick={() => window.location = config.host_url + "/profile/" + item.follower.address} />
                                                                 </div>
                                                                 <div className="profile-infos-follow-main-infos">
                                                                     <p className="profile-infos-follow-main-infos-name">{item.follower.name}</p>
                                                                     <p className="profile-infos-follow-main-infos-follow">{item.follower.followers_cnt} followers</p>
                                                                     <a className="btn btn-h32 btn-blue btn-fs-14" onClick={() => this.handleFollowers(item)} style={this.state.address == this.props.address && item.follower.is_following == false? {}: style_hidden}>
-                                                                        <span className="txt">Follow</span>
+                                                                        <span className="txt">{t('Follow')}</span>
                                                                     </a>
                                                                     <a className="btn btn-h32 btn-fs-14" onClick={() => this.handleFollowers(item)} style={this.state.address == this.props.address && item.follower.is_following == true? {}: style_hidden}>
-                                                                        <span className="txt">Unfollow</span>
+                                                                        <span className="txt">{t('Unfollow')}</span>
                                                                     </a>
                                                                 </div>
                                                             </div>
@@ -741,7 +750,7 @@ class Profile extends React.Component {
                                                                             {
                                                                                 item.tokens.map((token, index) => {
                                                                                     return (
-                                                                                        <div className="swiper-slide profile-infos-follow-col" onClick={() => document.location = "/item/" + token.token_contract_id + "/" + token.token_id}>
+                                                                                        <div className="swiper-slide profile-infos-follow-col" onClick={() => window.location = config.host_url + "/item/" + token.token_contract_id + "/" + token.token_id}>
                                                                                             <img src={JSON.parse(token.metadata).url} alt="" />
                                                                                         </div>
                                                                                     )

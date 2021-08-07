@@ -8,6 +8,7 @@ var local_storage_key = {
     KEY_WALLET_TYPE : 'wallet_type',
     KEY_WALLET : 'wallet',
     KEY_CONNECTED: 'connected',
+    KEY_WALLET_CONNECT: 'walletconnect',
 }
 
 var profile_selected_tab = {

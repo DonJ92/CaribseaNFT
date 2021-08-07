@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import '../styles/style.css';
 import { withTranslation } from 'react-i18next';
+import config from '../globals/config';
 
 class SimpleNav extends React.Component {
     render() {
@@ -11,7 +12,7 @@ class SimpleNav extends React.Component {
             <div className="breadcrumb">
                 <div className="content">
                     <div className="breadcrumb-row">
-                        <a className="btn btn-h40" href="/">
+                        <a className="btn btn-h40" href={config.host_url + "/"}>
                             <span className="ico ico-l"><i className="fas fa-long-arrow-alt-left"></i></span>
                             <span className="txt">{t('Back to home')}</span>
                         </a>

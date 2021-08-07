@@ -5,6 +5,7 @@ import '../styles/style.css';
 import Web3 from 'web3';
 import * as API from '../adapter/api';
 import $ from 'jquery';
+import provider_util from '../common/provider_util';
 
 import {AddClass, ChangeClass} from '../js/common';
 
@@ -39,8 +40,20 @@ class ProfileEdit extends React.Component {
         this.GetAccounts();
     }
 
-    GetAccounts() {
-        const web3 = new Web3(Web3.givenProvider);
+    async GetAccounts() {
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+        web3.eth.net.getId().then((res) => {
+            this.setState({
+                chainId: res
+            });
+        });
+
         web3.eth.getAccounts((error,result) => {
             if (error) {
                 console.log(error);
@@ -189,15 +202,16 @@ class ProfileEdit extends React.Component {
     }
 
     UpdateProfile(profile) {
+        const { t } = this.props;
         API.update_profile(profile)
         .then((res) => {
             console.log(res);
             if (res.result == true) {
-                window.location = "/profile/" + this.state.address;
+                window.location = config.host_url + "/profile/" + this.state.address;
             } else {
                 this.hideLoading();
 
-                alert('Updating profile failed.');
+                alert(t('Updating profile failed.'));
             }
         })
         .catch((err) => {
@@ -223,7 +237,7 @@ class ProfileEdit extends React.Component {
                             <div className="ep-head">
                                 <h2 className="ep-head-ttl">{t('Edit profile')}</h2>
                                 <p className="ep-head-txt">
-                                    You can set preferred display name, create <span>your profile URL</span> and manage other personal settings.
+                                    {t('You can set preferred display name, create your profile URL and manage other personal settings.')}
                                 </p>
                             </div>
 
@@ -237,7 +251,7 @@ class ProfileEdit extends React.Component {
                                         <div className="eb-body-photo-infos">
                                             <p className="eb-body-photo-infos-ttl">{t('Profile photo')}</p>
                                             <p className="eb-body-photo-infos-txt">
-                                                We recommend an image of at least 400x400.<br class="br-480-no"/>
+                                                We recommend an image of at least 400x400.<br className="br-480-no"/>
                                                 Gifs work too <span><img src={hand} alt="" /></span>
                                             </p>
                                             <a className="btn btn-h40" onClick={this.handleFileSelect}><span className="txt">{t('Upload')}</span></a>
@@ -336,7 +350,7 @@ class ProfileEdit extends React.Component {
                     <div className="popup-box">
                         <div className="loading-popup-head">
                             <div className="loader"></div>
-                            <p className="loading-popup-head-ttl">Please wait...</p>
+                            <p className="loading-popup-head-ttl">{t('Please wait...')}</p>
                         </div>
                     </div>
                 </div>

@@ -1,10 +1,12 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import '../styles/style.css';
+import * as API from '../adapter/api';
 
 import logo from '../img/logo.png';
 import i18n from 'i18next';
 import { withTranslation } from 'react-i18next';
+import config from '../globals/config';
 
 class Footer extends React.Component {
     constructor(props) {
@@ -12,8 +14,27 @@ class Footer extends React.Component {
     }
 
     mailTo() {
-        var mail = document.getElementById("email").value;
-        window.location.href = "mailto:" + mail;
+        const { t } = this.props;
+        var mail_address = document.getElementById("email").value;
+        const emailRegexp = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+
+        if (mail_address == "") {
+            alert(t('Please input the email address.'));
+            return;
+        }
+
+        if (emailRegexp.test(mail_address)) {
+            API.subscribe(mail_address)
+            .then((res) => {
+                if (res.result) alert(t('Subscribed successfully!'));
+                else alert(t('Subscribed failed.'));
+            })
+            .catch((err) => {
+                alert(t('Subscribed failed.'));
+            })
+        } else {
+            alert(t('Please input correct email address.'));
+        }
     }
 
     render() {
@@ -26,16 +47,16 @@ class Footer extends React.Component {
                             <h2 className="footer-logo">
                                 <img src={logo} alt="" />
                             </h2>
-                            <p className="footer-lead">{t('Degitize your asset at caribmars.finance NFT market.')}</p>
+                            <p className="footer-lead">{t('Digitize your asset, talent, social media at caribsea.io NFT market place supported by caribmars.finance.')}</p>
                         </div>
 
                         <div className="footer-body">
                             <div className="footer-nav-block">
                                 <p className="footer-nav-ttl">{t('Caribsea NFT market')}</p>
                                 <ul className="footer-nav-list">
-                                    <li className="footer-nav-item"><a href="/search"><span>{t('Discover')}</span></a></li>
-                                    <li className="footer-nav-item"><a href="/connect"><span>{t('Connect Wallet')}</span></a></li>
-                                    <li className="footer-nav-item"><a href="/upload/type"><span>{t('Create item')}</span></a></li>
+                                    <li className="footer-nav-item"><a href={config.host_url + "/search"}><span>{t('Discover')}</span></a></li>
+                                    {/* <li className="footer-nav-item"><a href="/connect"><span>{t('Connect Wallet')}</span></a></li> */}
+                                    <li className="footer-nav-item"><a href={config.host_url + "/upload/type"}><span>{t('Create item')}</span></a></li>
                                 </ul>
                                 <p className="footer-nav-ttl mt-40">{t('Language')}</p>
                                 <ul className="footer-nav-list">
@@ -49,7 +70,7 @@ class Footer extends React.Component {
                                 <ul className="footer-nav-list">
                                     <li className="footer-nav-item"><a href="https://caribmars.finance/"><span>{t('Offical')}</span></a></li>
                                     {/* <li className="footer-nav-item"><a href="#"><span>Demos</span></a></li> */}
-                                    <li className="footer-nav-item"><a href="/faq"><span>{t('FAQ')}</span></a></li>
+                                    <li className="footer-nav-item"><a href={config.host_url + "/faq"}><span>{t('FAQ')}</span></a></li>
                                     <li className="footer-nav-item"><a href="#"><span>{t('Support')}</span></a></li>
                                 </ul>
                             </div>

@@ -45,7 +45,7 @@ class UploadYoutubePage extends React.Component {
     }
 
     onYoutubeCreate(youtube_id){
-        document.location = "/upload/snsdetail/"+ CONST.token_type.SINGLE + "/" + CONST.sns_type.YOUTUBE + "/" + youtube_id + "/" + this.state.accessToken;
+        window.location = config.host_url + "/upload/snsdetail/"+ CONST.token_type.SINGLE + "/" + CONST.sns_type.YOUTUBE + "/" + youtube_id + "/" + this.state.accessToken;
     }
 
     showLoading() {
@@ -79,7 +79,7 @@ class UploadYoutubePage extends React.Component {
         return (
             <div>
                 <section id="upload-lead" className="upload-lead">
-                    <div class="content sns-div align-center">
+                    <div className="content sns-div align-center">
                     {!this.state.isLoggedIn &&
                     <GoogleLogin
                         clientId={config.google_client_id}

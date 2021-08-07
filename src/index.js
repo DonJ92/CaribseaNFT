@@ -1,6 +1,6 @@
 import React, { useContext, useState } from 'react';
 import ReactDOM from 'react-dom';
-import {BrowserRouter as Router, Route} from 'react-router-dom';
+import {BrowserRouter as Router, Route, Switch} from 'react-router-dom';
 import './index.css';
 import App from './App';
 import Header from './components/header';
@@ -23,7 +23,7 @@ import FAQ from './components/faq';
 import UploadType from './components/upload_type';
 import UploadTwitterPage from './components/upload_twitter';
 import UploadYoutubePage from './components/upload_youtube';
-import UploadTiktokPage from './components/upload_twitter';
+import UploadTiktokPage from './components/upload_tiktok';
 import UploadInstagramPage from './components/upload_instagram';
 import ConnectWallet from './components/connect_wallet';
 import ProfilePage from './pages/profile_page';
@@ -42,127 +42,114 @@ import SearchPage from './pages/search_page';
 
 import './i18n';
 
-var script = document.createElement('script');
-script.src = '../../libs/jquery/jquery-3.5.1.min.js';
-script.async = true;
-document.body.appendChild(script);
-
-script = document.createElement('script');
-script.src = '../../libs/swiper/js/swiper-bundle.min.js';
-script.async = true;
-document.body.appendChild(script);
-
-script = document.createElement('script');
-script.src = '../../js/page/home.js';
-script.async = true;
-document.body.appendChild(script);
-
 process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
+console.log(process.env.PUBLIC_URL);
 
 function Main () {
   return (
     <UseWalletProvider chainId={config.chain_id}>
       <Router>
-        <Route exact path="/">
-          <div>
-            <Header/>
-            <WelCome/>
-            <TopNFT/>
-            <PickUp/>
-            <PopularSellers/>
-            <HotBid/>
-            {/* <HotCollection/> */}
-            <Discover/>
-            <Earn/>
-            <Footer/>
-          </div>
-        </Route>
-        <Route path="/profile/:address" component={ProfilePage}>
-        </Route>
-        <Route path="/edit_profile">
-          <div>
-            <Header/>
-            <SimpleNav/>
-            <ProfileEdit/>
-            <Footer/>
-          </div>
-        </Route>
-        <Route path="/search/" component={SearchPage}>
-        </Route>
-        <Route path="/search_keyword/:keyword" component={SearchPage}>
-        </Route>
-        <Route path="/search_no_result">
-          <div>
-            <Header/>
-            <SearchNoResult/>
-            <Footer/>
-          </div>
-        </Route>
-        <Route path="/activity">
-          <div>
-            <Header/>
-            <SimpleNav/>
-            <Activity/>
-            <Footer/>
-          </div>
-        </Route>
-        <Route path="/item/:id" component={ItemPage}>
-        </Route>
-        <Route path="/faq">
-          <div>
-            <Header/>
-            <FAQ/>
-            <HotBid/>
-            <Footer/>
-          </div>
-        </Route>
-        <Route path="/upload/type">
-          <div>
-            <Header/>
-            <SimpleNav/>
-            <UploadType/>
-            <Footer/>
-          </div>
-        </Route>
-        <Route path="/upload/detail/:type" component={UploadDetailPage}>
-        </Route>
-        <Route path="/upload/snsdetail/:type/:sns_type/:id/:token" component={UploadSNSDetailPage}>
-        </Route>
-        <Route path="/upload/twitter/:type">
-          <div>
-            <Header/>
-            <UploadTwitterPage/>
-            <Footer/>
-          </div>
-        </Route>
-        <Route path="/upload/youtube/:type">
-          <div>
-            <Header/>
-            <UploadYoutubePage/>
-            <Footer/>
-          </div>
-        </Route>
-        <Route path="/upload/tiktok/:type">
-          <div>
-            <Header/>
-            <UploadTiktokPage/>
-            <Footer/>
-          </div>
-        </Route>
-        <Route path="/upload/instagram/:type">
-          <div>
-            <Header/>
-            <UploadInstagramPage/>
-            <Footer/>
-          </div>
-        </Route>
-        <Route path="/connect">
-          <div>
-            <Header/>
-            <ConnectWallet/>
-            <Footer/>
-          </div>
-        </Route>
+        <Switch>
+          <Route exact path="/">
+            <div>
+              <Header/>
+              <WelCome/>
+              <TopNFT/>
+              <PickUp/>
+              <PopularSellers/>
+              {/* <HotBid/> */}
+              <Discover/>
+              <Earn/>
+              <Footer/>
+            </div>
+          </Route>
+          <Route path="/profile/:address" component={ProfilePage}>
+          </Route>
+          <Route path="/edit_profile">
+            <div>
+              <Header/>
+              <SimpleNav/>
+              <ProfileEdit/>
+              <Footer/>
+            </div>
+          </Route>
+          <Route path="/search/" component={SearchPage}>
+          </Route>
+          <Route path="/search_keyword/:keyword" component={SearchPage}>
+          </Route>
+          <Route path="/search_no_result">
+            <div>
+              <Header/>
+              <SearchNoResult/>
+              <Footer/>
+            </div>
+          </Route>
+          <Route path="/activity">
+            <div>
+              <Header/>
+              <SimpleNav/>
+              <Activity/>
+              <Footer/>
+            </div>
+          </Route>
+          <Route path="/item/:id" component={ItemPage}>
+          </Route>
+          <Route path="/faq">
+            <div>
+              <Header/>
+              <FAQ/>
+              {/* <HotBid/> */}
+              <Footer/>
+            </div>
+          </Route>
+          <Route path="/upload/type">
+            <div>
+              <Header/>
+              <SimpleNav/>
+              <UploadType/>
+              <Footer/>
+            </div>
+          </Route>
+          <Route path="/upload/detail/:type" component={UploadDetailPage}>
+          </Route>
+          <Route path="/upload/snsdetail/:type/:sns_type/:id/:token" component={UploadSNSDetailPage}>
+          </Route>
+          <Route path="/upload/twitter/:type">
+            <div>
+              <Header/>
+              <UploadTwitterPage/>
+              <Footer/>
+            </div>
+          </Route>
+          <Route path="/upload/youtube/:type">
+            <div>
+              <Header/>
+              <UploadYoutubePage/>
+              <Footer/>
+            </div>
+          </Route>
+          <Route path="/upload/tiktok/:type">
+            <div>
+              <Header/>
+              <UploadTiktokPage/>
+              <Footer/>
+            </div>
+          </Route>
+          <Route path="/upload/instagram/:type">
+            <div>
+              <Header/>
+              <UploadInstagramPage/>
+              <Footer/>
+            </div>
+          </Route>
+          <Route path="/connect">
+            <div>
+              <Header/>
+              <ConnectWallet/>
+              <Footer/>
+            </div>
+          </Route>
+        </Switch>
       </Router>
     </UseWalletProvider>
   );

@@ -9,19 +9,21 @@ import $ from 'jquery';
 import TimeUtil from '../common/time_util';
 import CONST, { ACTIVITY_STATUS, ACTIVITY_TYPE } from '../globals/constants';
 import AssetUtil from '../common/asset_util';
+import provider_util from '../common/provider_util';
 
 import activity_01 from '../img/activity/activity-01.png';
 import config from '../globals/config';
 import { withTranslation } from 'react-i18next';
+import support_networks from '../globals/support_networks';
 
 class Activity extends React.Component {
     constructor(props) {
         super(props);
 
-        var script = document.createElement('script');
-        script.src = './js/page/activity.js';
-        script.async = true;
-        document.body.appendChild(script);
+        // var script = document.createElement('script');
+        // script.src = './js/page/activity.js';
+        // script.async = true;
+        // document.body.appendChild(script);
 
         ChangeClass('activity');
         AddClass('has-popup');
@@ -57,8 +59,20 @@ class Activity extends React.Component {
         $("#loading-popup").fadeOut(100);
     }
 
-    getAccount() {
-        const web3 = new Web3(Web3.givenProvider);
+    async getAccount() {
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+        web3.eth.net.getId().then((res) => {
+            this.setState({
+                chainId: res
+            });
+        });
+
         web3.eth.getAccounts((error,result) => {
             if (error) {
                 console.log(error);
@@ -129,6 +143,59 @@ class Activity extends React.Component {
         })
     }
 
+    onLoadMore() {
+        this.showLoading();
+        if (this.state.selected_tab == CONST.ACTIVITY_TAB.MY) {
+            API.get_my_activity(this.state.address, this.state.my_activities.length, 10)
+            .then((res) => {
+                this.hideLoading();
+                if (res.result) {
+                    this.setState({
+                        my_activities: this.state.my_activities.concat(res.activities)
+                    });
+                }
+            })
+        } else if (this.state.selected_tab == CONST.ACTIVITY_TAB.FOLLOWINGS) {
+            API.get_followings(this.state.address)
+            .then((res) => {
+                if (res.result) {
+                    if (res.profiles.length == 0) {
+                        this.setState({
+                            following_activities: []
+                        });
+                        this.hideLoading();
+                        return;
+                    }
+    
+                    var followings = [];
+                    res.profiles.forEach(profile => {
+                        followings.push(profile.address);
+                    });
+    
+                    API.get_activity_with_followings(followings, this.state.following_activities.length, 10)
+                    .then((res) => {
+                        this.hideLoading();
+                        if (res.result) {
+                            this.setState({
+                                following_activities: this.state.following_activities.concat(res.activities)
+                            });
+                        }
+                    })
+                }
+            })
+        } else if (this.state.selected_tab == CONST.ACTIVITY_TAB.ALL) {
+            API.get_all_activity()
+            .then((res) => {
+                this.hideLoading();
+                if (res.result) {
+                    this.setState({
+                        all_activities: this.state.all_activities.concat(res.activities)
+                    });
+                }
+            })
+        }
+    }
+
     onAvatarError(ev){
         ev.target.src = config.avatar_url + "default.png"
     }
@@ -189,42 +256,42 @@ class Activity extends React.Component {
                                 <div className="filters-list">
                                     <div className="checkbox-wrapper">
                                         <input id="chk-01" type="checkbox" checked/>
-                                        <label for="chk-01">Sales</label>
+                                        <label htmlFor="chk-01">Sales</label>
                                     </div>
 
                                     <div className="checkbox-wrapper">
                                         <input id="chk-02" type="checkbox"/>
-                                        <label for="chk-02">Listings</label>
+                                        <label htmlFor="chk-02">Listings</label>
                                     </div>
 
                                     <div className="checkbox-wrapper">
                                         <input id="chk-03" type="checkbox"/>
-                                        <label for="chk-03">Bids</label>
+                                        <label htmlFor="chk-03">Bids</label>
                                     </div>
 
                                     <div className="checkbox-wrapper">
                                         <input id="chk-04" type="checkbox" checked/>
-                                        <label for="chk-04">Burns</label>
+                                        <label htmlFor="chk-04">Burns</label>
                                     </div>
 
                                     <div className="checkbox-wrapper">
                                         <input id="chk-05" type="checkbox"/>
-                                        <label for="chk-05">Following</label>
+                                        <label htmlFor="chk-05">Following</label>
                                     </div>
 
                                     <div className="checkbox-wrapper">
                                         <input id="chk-06" type="checkbox"/>
-                                        <label for="chk-06">Likes</label>
+                                        <label htmlFor="chk-06">Likes</label>
                                     </div>
 
                                     <div className="checkbox-wrapper">
                                         <input id="chk-07" type="checkbox"/>
-                                        <label for="chk-07">Purchase</label>
+                                        <label htmlFor="chk-07">Purchase</label>
                                     </div>
 
                                     <div className="checkbox-wrapper">
                                         <input id="chk-08" type="checkbox" checked/>
-                                        <label for="chk-08">Transfers</label>
+                                        <label htmlFor="chk-08">Transfers</label>
                                     </div>
                                 </div>
                                 <div className="btn-group">
@@ -263,127 +330,159 @@ class Activity extends React.Component {
 
                                             switch(item.activity_type) {
                                                 case CONST.ACTIVITY_TYPE.MINT:
-                                                    title = "Mint";
+                                                    title = t("Mint");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Mint " + item.token_name + " #" + item.token_id + " token.";
+                                                        description = t('Mint ERC721 Token', {token_name: item.token_name, token_id: item.token_id});
                                                     } else {
-                                                        description = "Mint " + item.token_name + " " + item.token_cnt + " token(s).";
+                                                        description = t('Mint ERC1155 Token', {token_name: item.token_name, token_cnt: item.token_cnt});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.TRANSFER:
-                                                    title = "Transfer";
+                                                    title = t("Transfer");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
                                                         if (item.from_address == this.state.address) {
-                                                            description = "Transferred " + item.token_name + " #" + item.token_id + " token to " + item.to_name;
+                                                            description = t('Transferred ERC721 Token to', {token_name: item.token_name, token_id: item.token_id, name: item.to_name});
                                                         } else {
-                                                            description = "Transferred " + item.token_name + " #" + item.token_id + " token from " + item.from_name;
+                                                            description = t('Transferred ERC721 Token from', {token_name: item.token_name, token_id: item.token_id, name: item.from_name});
                                                         }
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
                                                         if (item.from_address == this.state.address) {
-                                                            description = "Transferred " + item.token_name + " " + item.token_cnt + " token(s) to " + item.to_name;
+                                                            description = t('Transferred ERC1155 Token to', {token_name: item.token_name, token_cnt: item.token_cnt, name: item.to_name});
                                                         } else {
-                                                            description = "Transferred " + item.token_name + " " + item.token_cnt + " token(s) from " + item.from_name;
+                                                            description = t('Transferred ERC1155 Token from', {token_name: item.token_name, token_cnt: item.token_cnt, name: item.from_name});
                                                         }
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.LIST_FIXED_SIZE:
-                                                    title = "List for sale";
+                                                    title = t("List for sell");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Listed " + item.token_name + " #" + item.token_id + " token for sale as " + item.amount + " BNB."
+                                                        if (item.chain_id == support_networks.ETHEREUM) {
+                                                            description = t('Listed ERC721 fixed price ETH', {token_name: item.token_name, token_id: item.token_id, amount: item.amount});
+                                                        } else if (item.chain_id == support_networks.BSC) {
+                                                            description = t('Listed ERC721 fixed price BNB', {token_name: item.token_name, token_id: item.token_id, amount: item.amount});
+                                                        }
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "Listed " + item.token_name + " " + item.token_cnt + " token(s) for sale as " + item.amount + " BNB."
+                                                        if (item.chain_id == support_networks.ETHEREUM) {
+                                                            description = t('Listed ERC1155 fixed price ETH', {token_name: item.token_name, token_id: item.token_cnt, amount: item.amount});
+                                                        } else if (item.chain_id == support_networks.BSC) {
+                                                            description = t('Listed ERC1155 fixed price BNB', {token_name: item.token_name, token_id: item.token_cnt, amount: item.amount});
+                                                        }
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.LIST_AUCTION:
-                                                    title = "List for sale";
+                                                    title = t("List for sell");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Listed " + item.token_name + " #" + item.token_id + " token for sale with minimum price as " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + ".";
+                                                        description = t('Listed ERC721 auction', {token_name: item.token_name, token_id: item.token_id, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id)});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "Listed " + item.token_name + " " + item.token_cnt + " token(s) for sale with minimum price as " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + ".";
+                                                        description = t('Listed ERC1155 auction', {token_name: item.token_name, token_cnt: item.token_cnt, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id)});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.UNLIST:
-                                                    title = "Remove from sale";
+                                                    title = t("Remove from sell");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Removed " + item.token_name + " #" + item.token_id + " token from sale.";
+                                                        description = t('Removed ERC721 from sell', {token_name: item.token_name, token_id: item.token_id});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "Removed " + item.token_name + " " + item.token_cnt + " token(s) from sale.";
+                                                        description = t('Removed ERC1155 from sell', {token_name: item.token_name, token_cnt: item.token_cnt});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.BID:
-                                                    title = "BID";
+                                                    title = t("BID");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "BID " + item.token_name + " #" + item.token_id + " token with " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + ".";
+                                                        description = t('BID ERC721', {token_name: item.token_name, token_id: item.token_id, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id)});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "BID " + item.token_name + " " + item.token_cnt + " token(s) with " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + ".";
+                                                        description = t('BID ERC1155', {token_name: item.token_name, token_cnt: item.token_cnt, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id)});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.EXCHANGE:
-                                                    title = "Exchange";
+                                                    title = t("Exchange");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Exchanged " + item.token_name + " #" + item.token_id + " token from the auction with " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + ".";
+                                                        description = t('Exchanged ERC721', {token_name: item.token_name, token_id: item.token_id, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id)});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "Exchanged " + item.token_name + " " + item.token_id + " token(s) from the auction with " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + ".";
+                                                        description = t('Exchanged ERC1155', {token_name: item.token_name, token_cnt: item.token_cnt, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id)});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.BUY:
-                                                    title = "BUY";
+                                                    title = t("BUY");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = item.to_name + " bought " + item.token_name + " #" + item.token_id + " token with " + item.amount + " BNB.";
+                                                        if (item.from_address == this.state.address) {
+                                                            if (item.chain_id == support_networks.ETHEREUM) {
+                                                                description = t('Sold ERC721 token', {token_name: item.token_name, token_id: item.token_id, opponent: item.to_name, amount: item.amount, asset: 'ETH'});
+                                                            } else if (item.chain_id == support_networks.BSC) {
+                                                                description = t('Sold ERC721 token', {token_name: item.token_name, token_id: item.token_id, opponent: item.to_name, amount: item.amount, asset: 'BNB'});
+                                                            }
+                                                        } else {
+                                                            if (item.chain_id == support_networks.ETHEREUM) {
+                                                                description = t('Bought ERC721 token', {token_name: item.token_name, token_id: item.token_id, opponent: item.from_name, amount: item.amount, asset: 'ETH'});
+                                                            } else if (item.chain_id == support_networks.BSC) {
+                                                                description = t('Bought ERC721 token', {token_name: item.token_name, token_id: item.token_id, opponent: item.from_name, amount: item.amount, asset: 'BNB'});
+                                                            }
+                                                        }
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = item.to_name + " bought " + item.token_name + " " + item.token_cnt + " token(s) with " + item.amount + " BNB.";
+                                                        if (item.from_address == this.state.address) {
+                                                            if (item.chain_id == support_networks.ETHEREUM) {
+                                                                description = t('Sold ERC1155 token', {token_name: item.token_name, token_cnt: item.token_cnt, opponent: item.to_name, amount: item.amount, asset: 'ETH'});
+                                                            } else if (item.chain_id == support_networks.BSC) {
+                                                                description = t('Sold ERC1155 token', {token_name: item.token_name, token_cnt: item.token_cnt, opponent: item.to_name, amount: item.amount, asset: 'BNB'});
+                                                            }
+                                                        } else {
+                                                            if (item.chain_id == support_networks.ETHEREUM) {
+                                                                description = t('Bought ERC1155 token', {token_name: item.token_name, token_cnt: item.token_cnt, opponent: item.from_name, amount: item.amount, asset: 'ETH'});
+                                                            } else if (item.chain_id == support_networks.BSC) {
+                                                                description = t('Bought ERC1155 token', {token_name: item.token_name, token_cnt: item.token_cnt, opponent: item.from_name, amount: item.amount, asset: 'BNB'});
+                                                            }
+                                                        }
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.SELF_CANCEL:
-                                                    title = "Cancel bid";
+                                                    title = t("Cancel bid");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Cancelled your bid of " + item.token_name + " #" + item.token_id + " token.";
+                                                        description = t('Cancelled your bid of ERC721', {token_name: item.token_name, token_id: item.token_id});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "Cancelled your bid of " + item.token_name + " " + item.token_cnt + " token(s).";
+                                                        description = t('Cancelled your bid of ERC1155', {token_name: item.token_name, token_cnt: item.token_cnt});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.CANCEL:
-                                                    title = "Acution end";
+                                                    title = t("Auction end");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "The auction of " + item.token_name + " #" + item.token_id + " token ended";
+                                                        description = t("Auction ended ERC721", {token_name: item.token_name, token_id: item.token_id});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "The auction of " + item.token_name + " " + item.token_cnt + " token(s) ended";
+                                                        description = t("Auction ended ERC1155", {token_name: item.token_name, token_cnt: item.token_cnt});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.FOLLOW:
-                                                    title = "Follow";
+                                                    title = t("Follow");
                                                     if (item.from_address == this.state.address) {
-                                                        description = "Started to folllow " + item.to_name;
+                                                        description = t("Started to follow", {name: item.to_name});
                                                         img_src = config.avatar_url + item.to_address + ".png";
                                                     } else {
-                                                        description = "Following from " + item.from_name;
+                                                        description = t("Followed from", {name: item.from_name});
                                                         img_src = config.avatar_url + item.from_address + ".png";
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.UNFOLLOW:
-                                                    title = "Unfollow";
+                                                    title = t("Unfollow");
                                                     if (item.from_address == this.state.address) {
-                                                        description = "Unfollowed " + item.to_name;
+                                                        description = t("Unfollowed from me", {name: item.to_name});
                                                         img_src = config.avatar_url + item.to_address + ".png";
                                                     } else {
-                                                        description = item.from_name + " unfollowed " + item.from_name;
+                                                        description = t("Unfollowed to me", {name: item.from_name});
                                                         img_src = config.avatar_url + item.from_address + ".png";
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.STAKE:
-                                                    title = "Stake";
-                                                    description = "Staked " + item.token_name + " #" + item.token_id + " token.";
+                                                    title = t("Stake");
+                                                    description = t("Staked", {token_name: item.token_name, token_id: item.token_id});
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.REVOKE:
-                                                    title = "Revoke";
-                                                    description = "Revoked " + item.token_name + " #" + item.token_id + " token.";
+                                                    title = t("Revoke");
+                                                    description = t("Revoked", {token_name: item.token_name, token_id: item.token_id});
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.BURN:
-                                                    title = "Burn";
+                                                    title = t("Burn");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description  = "Burned " + item.token_name + " #" + item.token_id + " token.";
+                                                        description = t('Burned ERC721', {token_name: item.token_name, token_id: item.token_id});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description  = "Burned " + item.token_name + " " + item.token_cnt + " token(s).";
+                                                        description = t('Burned ERC1155', {token_name: item.token_name, token_cnt: item.token_cnt});
                                                     }
                                                     break;
                                             }
@@ -420,110 +519,125 @@ class Activity extends React.Component {
 
                                             switch(item.activity_type) {
                                                 case CONST.ACTIVITY_TYPE.MINT:
-                                                    title = "Mint";
+                                                    title = t("Mint");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Mint " + item.token_name + " #" + item.token_id + " token by " + item.from_name;
+                                                        description = t("Mint ERC721 by", {token_name: item.token_name, token_id: item.token_id, name: item.from_name});
                                                     } else {
-                                                        description = "Mint " + item.token_name + " " + item.token_cnt + " token(s) by " + item.from_name;
+                                                        description = t("Mint ERC1155 by", {token_name: item.token_name, token_cnt: item.token_cnt, name: item.from_name});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.TRANSFER:
-                                                    title = "Transfer";
+                                                    title = t("Transfer");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Transferred " + item.token_name +" #" + item.token_id + " token from " + item.from_name + " to " + item.to_name;
+                                                        description = t("Transferred ERC721 Token from to", {token_name: item.token_name, token_id: item.token_id, from: item.from_name, to: item.to_name});
                                                     } else {
-                                                        description = "Transferred " + item.token_name +" " + item.token_cnt + " token(s) from " + item.from_name + " to " + item.to_name;
+                                                        description = t("Transferred ERC1155 Token from to", {token_name: item.token_name, token_cnt: item.token_cnt, from: item.from_name, to: item.to_name});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.LIST_FIXED_SIZE:
-                                                    title = "List for sale";
+                                                    title = t("List for sell");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Listed " + item.token_name + " #" + item.token_id + " token for sale as " + item.amount + " BNB by " + item.from_name + ".";
+                                                        if (item.chain_id == support_networks.ETHEREUM) {
+                                                            description = t("Listed ERC721 fixed price by", {token_name: item.token_name, token_id: item.token_id, amount: item.amount, asset: 'ETH', name: item.from_name});
+                                                        } else if (item.chain_id == support_networks.BSC) {
+                                                            description = t("Listed ERC721 fixed price by", {token_name: item.token_name, token_id: item.token_id, amount: item.amount, asset: 'BNB', name: item.from_name});
+                                                        }
                                                     } else {
-                                                        description = "Listed " + item.token_name + " " + item.token_cnt + " token(s) for sale as " + item.amount + " BNB by " + item.from_name + ".";
+                                                        if (item.chain_id == support_networks.ETHEREUM) {
+                                                            description = t("Listed ERC1155 fixed price by", {token_name: item.token_name, token_cnt: item.token_cnt, amount: item.amount, asset: 'ETH', name: item.from_name});
+                                                        } else if (item.chain_id == support_networks.BSC) {
+                                                            description = t("Listed ERC1155 fixed price by", {token_name: item.token_name, token_cnt: item.token_cnt, amount: item.amount, asset: 'BNB', name: item.from_name});
+                                                        }
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.LIST_AUCTION:
-                                                    title = "List for sale";
+                                                    title = t("List for sell");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Listed " + item.token_name + " #" + item.token_id + " token for sale with minimum price as " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + " by " + item.from_name + ".";
+                                                        description = t("Listed ERC721 auction by", {token_name: item.token_name, token_id: item.token_id, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id), name: item.from_name});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "Listed " + item.token_name + " " + item.token_cnt + " token(s) for sale with minimum price as " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + " by " + item.from_name + ".";
+                                                        description = t("Listed ERC1155 auction by", {token_name: item.token_name, token_cnt: item.token_cnt, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id), name: item.from_name});
                                                     }
-                                                    
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.UNLIST:
-                                                    title = "Remove from sale";
+                                                    title = t("Remove from sell");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Removed " + item.token_name + " #" + item.token_id + " token from sale by " + item.from_name + ".";
+                                                        description = t("Removed ERC721 from sell by", {token_name: item.token_name, token_id: item.token_id, name: item.from_name});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "Removed " + item.token_name + " " + item.token_cnt + " token(s) from sale by " + item.from_name + ".";
+                                                        description = t("Removed ERC1155 from sell by", {token_name: item.token_name, token_cnt: item.token_cnt, name: item.from_name});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.BID:
-                                                    title = "BID";
+                                                    title = t("BID");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "BID " + item.token_name + " #" + item.token_id + " token with " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + " by " + item.from_name + ".";
+                                                        description = t("BID ERC721 by", {token_name: item.token_name, token_id: item.token_id, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id), name: item.from_name});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "BID " + item.token_name + " " + item.token_cnt + " token(s) with " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + " by " + item.from_name + ".";
+                                                        description = t("BID ERC1155 by", {token_name: item.token_name, token_cnt: item.token_cnt, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id), name: item.from_name});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.EXCHANGE:
-                                                    title = "Exchange";
+                                                    title = t("Exchange");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Exchanged " + item.token_name + " #" + item.token_id + " token from the auction with " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + " by " + item.from_name + ".";
+                                                        description = t("Exchanged ERC721 by", {token_name: item.token_name, token_id: item.token_id, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id), name: item.from_name});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "Exchanged " + item.token_name + " " + item.token_cnt + " token(s) from the auction with " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + " by " + item.from_name + ".";
+                                                        description = t("Exchanged ERC1155 by", {token_name: item.token_name, token_cnt: item.token_cnt, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id), name: item.from_name});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.BUY:
-                                                    title = "BUY";
+                                                    title = t("BUY");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = item.to_name + " bought " + item.token_name + " #" + item.token_id + " token with " + item.amount + " BNB.";
+                                                        if (item.chain_id == support_networks.ETHEREUM) {
+                                                            description = t("Bought ERC721 token by", {token_name: item.token_name, token_id: item.token_id, opponent: item.to_name, amount: item.amount, asset: "ETH"});
+                                                        } else if (item.chain_id == support_networks.BSC) {
+                                                            description = t("Bought ERC721 token by", {token_name: item.token_name, token_id: item.token_id, opponent: item.to_name, amount: item.amount, asset: "BNB"});
+                                                        }
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = item.to_name + " bought " + item.token_name + " " + item.token_cnt + " token(s) with " + item.amount + " BNB.";
+                                                        if (item.chain_id == support_networks.ETHEREUM) {
+                                                            description = t("Bought ERC1155 token by", {token_name: item.token_name, token_cnt: item.token_cnt, opponent: item.to_name, amount: item.amount, asset: "ETH"});
+                                                        } else if (item.chain_id == support_networks.BSC) {
+                                                            description = t("Bought ERC1155 token by", {token_name: item.token_name, token_cnt: item.token_cnt, opponent: item.to_name, amount: item.amount, asset: "BNB"});
+                                                        }
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.SELF_CANCEL:
-                                                    title = "Cancel bid";
+                                                    title = t("Cancel bid");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = item.from_name + " cancelled your bid of " + item.token_name + " #" + item.token_id + " token.";
+                                                        description = t("Cancelled bid of ERC721 by", {name: item.from_name, token_name: item.token_name, token_id: item.token_id});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = item.from_name + " cancelled your bid of " + item.token_name + " " + item.token_cnt + " token(s).";
+                                                        description = t("Cancelled bid of ERC1155 by", {name: item.from_name, token_name: item.token_name, token_cnt: item.token_cnt});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.CANCEL:
-                                                    title = "Acution end";
+                                                    title = t("Auction end");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "The auction of " + item.token_name + " #" + item.token_id + " token ended";
+                                                        description = t("Auction ended ERC721 by", {token_name: item.token_name, token_id: item.token_id, name: item.from_name});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "The auction of " + item.token_name + " " + item.token_cnt + " token(s) ended";
+                                                        description = t("Auction ended ERC1155 by", {token_name: item.token_name, token_cnt: item.token_cnt, name: item.from_name});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.FOLLOW:
-                                                    title = "Follow";
-                                                    description = item.from_name + " started to folllow " + item.to_name;
+                                                    title = t("Follow");
+                                                    description = t("Followed from to", {from: item.from_name, to: item.to_name});
                                                     img_src = config.avatar_url + item.to_address + ".png";
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.UNFOLLOW:
-                                                    title = "Unfollow";
-                                                    description = item.from_name + " unfollowed " + item.to_name;
+                                                    title = t("Unfollow");
+                                                    description = t("Unfollowed from to", {from: item.from_name, to: item.to_name});
                                                     img_src = config.avatar_url + item.to_address + ".png";
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.STAKE:
-                                                    title = "Stake";
-                                                    description = "Staked " + item.token_name + " " + item.token_id + " token by " + item.from_name + ".";
+                                                    title = t("Stake");
+                                                    description = t("Staked by", {token_name: item.token_name, token_id: item.token_id, name: item.from_name});
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.REVOKE:
-                                                    title = "Revoke";
-                                                    description = "Revoked " + item.token_name + " " + item.token_id + " token by " + item.from_name + ".";
+                                                    title = t("Revoke");
+                                                    description = t("Revoked by", {token_name: item.token_name, token_id: item.token_id, name: item.from_name});
                                                     break;
                                                 case ACTIVITY_TYPE.BURN:
-                                                    title = "Burn";
+                                                    title = t("Burn");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description  = "Burned " + item.token_name + " #" + item.token_id + " token by " + item.from_name + ".";
+                                                        description = t("Burned ERC721 by", {token_name: item.token_name, token_id: item.token_id, name: item.from_name});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description  = "Burned " + item.token_name + " " + item.token_cnt + " token(s) by " + item.from_name + ".";
+                                                        description = t("Burned ERC1155 by", {token_name: item.token_name, token_cnt: item.token_cnt, name: item.from_name});
                                                     }
                                                     break;
                                             }
@@ -560,109 +674,125 @@ class Activity extends React.Component {
 
                                             switch(item.activity_type) {
                                                 case CONST.ACTIVITY_TYPE.MINT:
-                                                    title = "Mint";
+                                                    title = t("Mint");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Mint " + item.token_name + " #" + item.token_id + " token by " + item.from_name;
+                                                        description = t("Mint ERC721 by", {token_name: item.token_name, token_id: item.token_id, name: item.from_name});
                                                     } else {
-                                                        description = "Mint " + item.token_name + " " + item.token_cnt + " token(s) by " + item.from_name;
+                                                        description = t("Mint ERC1155 by", {token_name: item.token_name, token_cnt: item.token_cnt, name: item.from_name});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.TRANSFER:
-                                                    title = "Transfer";
+                                                    title = t("Transfer");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Transferred " + item.token_name +" #" + item.token_id + " token from " + item.from_name + " to " + item.to_name;
-                                                    } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "Transferred " + item.token_name +" " + item.token_cnt + " token(s) from " + item.from_name + " to " + item.to_name;
+                                                        description = t("Transferred ERC721 Token from to", {token_name: item.token_name, token_id: item.token_id, from: item.from_name, to: item.to_name});
+                                                    } else {
+                                                        description = t("Transferred ERC1155 Token from to", {token_name: item.token_name, token_cnt: item.token_cnt, from: item.from_name, to: item.to_name});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.LIST_FIXED_SIZE:
-                                                    title = "List for sale";
+                                                    title = t("List for sell");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Listed " + item.token_name + " #" + item.token_id + " token for sale as " + item.amount + " BNB by " + item.from_name + ".";
-                                                    } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "Listed " + item.token_name + " " + item.token_cnt + " token(s) for sale as " + item.amount + " BNB by " + item.from_name + ".";
+                                                        if (item.chain_id == support_networks.ETHEREUM) {
+                                                            description = t("Listed ERC721 fixed price by", {token_name: item.token_name, token_id: item.token_id, amount: item.amount, asset: 'ETH', name: item.from_name});
+                                                        } else if (item.chain_id == support_networks.BSC) {
+                                                            description = t("Listed ERC721 fixed price by", {token_name: item.token_name, token_id: item.token_id, amount: item.amount, asset: 'BNB', name: item.from_name});
+                                                        }
+                                                    } else {
+                                                        if (item.chain_id == support_networks.ETHEREUM) {
+                                                            description = t("Listed ERC1155 fixed price by", {token_name: item.token_name, token_cnt: item.token_cnt, amount: item.amount, asset: 'ETH', name: item.from_name});
+                                                        } else if (item.chain_id == support_networks.BSC) {
+                                                            description = t("Listed ERC1155 fixed price by", {token_name: item.token_name, token_cnt: item.token_cnt, amount: item.amount, asset: 'BNB', name: item.from_name});
+                                                        }
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.LIST_AUCTION:
-                                                    title = "List for sale";
+                                                    title = t("List for sell");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Listed " + item.token_name + " #" + item.token_id + " token for sale with minimum price as " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + " by " + item.from_name + ".";
+                                                        description = t("Listed ERC721 auction by", {token_name: item.token_name, token_id: item.token_id, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id), name: item.from_name});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "Listed " + item.token_name + " " + item.token_cnt + " token(s) for sale with minimum price as " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + " by " + item.from_name + ".";
+                                                        description = t("Listed ERC1155 auction by", {token_name: item.token_name, token_cnt: item.token_cnt, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id), name: item.from_name});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.UNLIST:
-                                                    title = "Remove from sale";
+                                                    title = t("Remove from sell");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Removed " + item.token_name + " #" + item.token_id + " token from sale by " + item.from_name + ".";
+                                                        description = t("Removed ERC721 from sell by", {token_name: item.token_name, token_id: item.token_id, name: item.from_name});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "Removed " + item.token_name + " " + item.token_cnt + " token(s) from sale by " + item.from_name + ".";
+                                                        description = t("Removed ERC1155 from sell by", {token_name: item.token_name, token_cnt: item.token_cnt, name: item.from_name});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.BID:
-                                                    title = "BID";
+                                                    title = t("BID");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "BID " + item.token_name + " #" + item.token_id + " token with " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + " by " + item.from_name + ".";
+                                                        description = t("BID ERC721 by", {token_name: item.token_name, token_id: item.token_id, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id), name: item.from_name});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "BID " + item.token_name + " " + item.token_cnt + " token(s) with " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + " by " + item.from_name + ".";
+                                                        description = t("BID ERC1155 by", {token_name: item.token_name, token_cnt: item.token_cnt, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id), name: item.from_name});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.EXCHANGE:
-                                                    title = "Exchange";
+                                                    title = t("Exchange");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "Exchanged " + item.token_name + " #" + item.token_id + " token from the auction with " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + " by " + item.from_name + ".";
+                                                        description = t("Exchanged ERC721 by", {token_name: item.token_name, token_id: item.token_id, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id), name: item.from_name});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "Exchanged " + item.token_name + " " + item.token_cnt + " token(s) from the auction with " + item.amount + " " + AssetUtil.get_asset_by_id(item.asset_id) + " by " + item.from_name + ".";
+                                                        description = t("Exchanged ERC1155 by", {token_name: item.token_name, token_cnt: item.token_cnt, amount: item.amount, asset: AssetUtil.get_asset_by_id(item.asset_id), name: item.from_name});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.BUY:
-                                                    title = "BUY";
+                                                    title = t("BUY");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = item.to_name + " bought " + item.token_name + " #" + item.token_id + " token with " + item.amount + " BNB.";
+                                                        if (item.chain_id == support_networks.ETHEREUM) {
+                                                            description = t("Bought ERC721 token by", {token_name: item.token_name, token_id: item.token_id, opponent: item.to_name, amount: item.amount, asset: "ETH"});
+                                                        } else if (item.chain_id == support_networks.BSC) {
+                                                            description = t("Bought ERC721 token by", {token_name: item.token_name, token_id: item.token_id, opponent: item.to_name, amount: item.amount, asset: "BNB"});
+                                                        }
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = item.to_name + " bought " + item.token_name + " " + item.token_cnt + " token(s) with " + item.amount + " BNB.";
+                                                        if (item.chain_id == support_networks.ETHEREUM) {
+                                                            description = t("Bought ERC1155 token by", {token_name: item.token_name, token_cnt: item.token_cnt, opponent: item.to_name, amount: item.amount, asset: "ETH"});
+                                                        } else if (item.chain_id == support_networks.BSC) {
+                                                            description = t("Bought ERC1155 token by", {token_name: item.token_name, token_cnt: item.token_cnt, opponent: item.to_name, amount: item.amount, asset: "BNB"});
+                                                        }
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.SELF_CANCEL:
-                                                    title = "Cancel bid";
+                                                    title = t("Cancel bid");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = item.from_name + " cancelled your bid of " + item.token_name + " #" + item.token_id + " token.";
+                                                        description = t("Cancelled bid of ERC721 by", {name: item.from_name, token_name: item.token_name, token_id: item.token_id});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = item.from_name + " cancelled your bid of " + item.token_name + " " + item.token_cnt + " token(s).";
+                                                        description = t("Cancelled bid of ERC1155 by", {name: item.from_name, token_name: item.token_name, token_cnt: item.token_cnt});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.CANCEL:
-                                                    title = "Acution end";
+                                                    title = t("Auction end");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description = "The auction of " + item.token_name + " #" + item.token_id + " token ended by " + item.from_name;
+                                                        description = t("Auction ended ERC721 by", {token_name: item.token_name, token_id: item.token_id, name: item.from_name});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description = "The auction of " + item.token_name + " " + item.token_cnt + " token(s) ended by " + item.from_name;
+                                                        description = t("Auction ended ERC1155 by", {token_name: item.token_name, token_cnt: item.token_cnt, name: item.from_name});
                                                     }
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.FOLLOW:
-                                                    title = "Follow";
-                                                    description = item.from_name + " started to folllow " + item.to_name;
+                                                    title = t("Follow");
+                                                    description = t("Followed from to", {from: item.from_name, to: item.to_name});
                                                     img_src = config.avatar_url + item.to_address + ".png";
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.UNFOLLOW:
-                                                    title = "Unfollow";
-                                                    description = item.from_name + " unfollowed " + item.to_name;
+                                                    title = t("Unfollow");
+                                                    description = t("Unfollowed from to", {from: item.from_name, to: item.to_name});
                                                     img_src = config.avatar_url + item.to_address + ".png";
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.STAKE:
-                                                    title = "Stake";
-                                                    description = "Staked " + item.token_name + " " + item.token_id + " token by " + item.from_name + ".";
+                                                    title = t("Stake");
+                                                    description = t("Staked by", {token_name: item.token_name, token_id: item.token_id, name: item.from_name});
                                                     break;
                                                 case CONST.ACTIVITY_TYPE.REVOKE:
-                                                    title = "Revoke";
-                                                    description = "Revoked " + item.token_name + " " + item.token_id + " token by " + item.from_name + ".";
+                                                    title = t("Revoke");
+                                                    description = t("Revoked by", {token_name: item.token_name, token_id: item.token_id, name: item.from_name});
                                                     break;
                                                 case ACTIVITY_TYPE.BURN:
-                                                    title = "Burn";
+                                                    title = t("Burn");
                                                     if (item.token_type == CONST.protocol_type.ERC721) {
-                                                        description  = "Burned " + item.token_name + " #" + item.token_id + " token by " + item.from_name + ".";
+                                                        description = t("Burned ERC721 by", {token_name: item.token_name, token_id: item.token_id, name: item.from_name});
                                                     } else if (item.token_type == CONST.protocol_type.ERC1155) {
-                                                        description  = "Burned " + item.token_name + " " + item.token_cnt + " token(s) by " + item.from_name + ".";
+                                                        description = t("Burned ERC1155 by", {token_name: item.token_name, token_cnt: item.token_cnt, name: item.from_name});
                                                     }
                                                     break;
                                             }
@@ -686,13 +816,7 @@ class Activity extends React.Component {
                                         })
                                     }
                                 </div>
-
-                                {/* <div className="act-load-more">
-                                    <span className="act-load-more-icon">
-                                        <i className="fas fa-spinner"></i>
-                                    </span>
-                                </div> */}
-                                {/* <a id="btn-load-more" className="btn btn-h40 btn-fs-14" href="#"><span className="txt">Make all as read</span></a>    */}
+                                <a id="btn-load-more" className="btn btn-h40 btn-fs-14 load-more" onClick={() => this.onLoadMore()} ><span className="txt">{t('Load More')}</span></a>   
                             </div>
                         </main>
                     </div>
@@ -702,7 +826,7 @@ class Activity extends React.Component {
                     <div className="popup-box">
                         <div className="loading-popup-head">
                             <div className="loader"></div>
-                            <p className="loading-popup-head-ttl">Please wait...</p>
+                            <p className="loading-popup-head-ttl">{t('Please wait...')}</p>
                         </div>
                     </div>
                 </div>

@@ -14,10 +14,10 @@ class SearchNoResult extends React.Component {
     constructor(props) {
         super(props);
 
-        var script = document.createElement('script');
-        script.src = './js/page/search.js';
-        script.async = true;
-        document.body.appendChild(script);
+        // var script = document.createElement('script');
+        // script.src = './js/page/search.js';
+        // script.async = true;
+        // document.body.appendChild(script);
 
         ChangeClass('search');
     }
@@ -47,7 +47,7 @@ class SearchNoResult extends React.Component {
 
                     <div className="explore-more">
                         <p className="explore-more-ttl">Explore more</p>
-                        <div class="em-list-wrapper">
+                        <div className="em-list-wrapper">
                             <div className="em-list">
                                 <a className="em-item" href="#">
                                     <div className="em-item-icon">

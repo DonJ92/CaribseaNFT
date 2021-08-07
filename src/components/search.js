@@ -29,10 +29,10 @@ class Search extends React.Component {
     constructor(props) {
         super(props);
 
-        var script = document.createElement('script');
-        script.src = './js/page/search.js';
-        script.async = true;
-        document.body.appendChild(script);
+        // var script = document.createElement('script');
+        // script.src = './js/page/search.js';
+        // script.async = true;
+        // document.body.appendChild(script);
 
         AddClass('search');
         AddClass('has-popup');
@@ -177,7 +177,7 @@ class Search extends React.Component {
                 <div className="content">
                     <div className="search-head">
                         <div className="search-head-keyword">
-                            <input id="input_keyword" type="text" placeholder="Type your keywords" onKeyDown={this.registerSearchEnterKeyEvent}/>
+                            <input id="input_keyword" type="text" placeholder={t('"Type your keywords"')} onKeyDown={this.registerSearchEnterKeyEvent}/>
                             <a onClick={() => this.handleSearch()}><i className="fas fa-search"></i></a>
                         </div>
 
@@ -199,7 +199,7 @@ class Search extends React.Component {
                                 <div className="arrow"><i className="fas fa-angle-down"></i></div>
                             </div>
 
-                            <div class="sh-options-tags-wrapper">
+                            <div className="sh-options-tags-wrapper">
                                 <div className="sh-options-tags tags-list">
                                     <a className={this.state.selected_tab == TAB_TYPE.ALL? "active": ""} onClick={() => this.handleTabSelected(TAB_TYPE.ALL)}>{t('All items')}</a>
                                     <a className={this.state.selected_tab == TAB_TYPE.ART? "active": ""} onClick={() => this.handleTabSelected(TAB_TYPE.ART)}>{t('Art')}</a>
@@ -272,7 +272,7 @@ class Search extends React.Component {
                                     </div>
                                 </div>
                             </div>
-                            <a className="sb-aside-reset-filter" onClick={() => document.location="/search"}>
+                            <a className="sb-aside-reset-filter" onClick={() => window.location = config.host_url + "/search"}>
                                 <span className="ico"><i className="fas fa-times-circle"></i></span>
                                 <span className="txt">{t('Reset filter')}</span>
                             </a>
@@ -287,20 +287,20 @@ class Search extends React.Component {
                                         var price_comment = "";
 
                                         if (item.status == CONST.token_status.FIXED_PRICE) {
-                                            stock_txt = "No Auction"
+                                            stock_txt = t("No Auction")
                                             price_txt = BalanceUtil.format_balance(item.price, "BNB", 2);
-                                            price_comment = "Fixed Price";
+                                            price_comment = t("Fixed Price");
                                         } else if (item.status == CONST.token_status.AUCTION) {
-                                            stock_txt = item.bids.length + " in Stock";
+                                            stock_txt = t('in Stock', {count: item.bids.length});
                                             if (item.bids.length == 0) {
-                                                price_comment = "Minimum Bid";
+                                                price_comment = t("Minimum Bid");
                                                 price_txt = BalanceUtil.format_balance(
                                                     item.price,
                                                     AssetUtil.get_asset_by_id(item.auction_asset_id),
                                                     2
                                                 )
                                             } else {
-                                                price_comment = "Highest Bid";
+                                                price_comment = t("Highest Bid");
                                                 price_txt = BalanceUtil.format_balance(
                                                     item.bids[0].amount,
                                                     AssetUtil.get_asset_by_id(item.auction_asset_id),
@@ -308,17 +308,17 @@ class Search extends React.Component {
                                                 )
                                             }
                                         } else {
-                                            stock_txt = "No auction";
-                                            price_comment = "Not sell"
+                                            stock_txt = t("No auction");
+                                            price_comment = t("Not sell")
                                             price_txt = "";
                                         }
 
                                         return (
-                                            <div className="sb-main-item" onClick={() => document.location = "/item/" + item.id}>
+                                            <div className="sb-main-item" onClick={() => window.location = config.host_url + "/item/" + item.id}>
                                                 <div className="sb-main-item-figure figure-has-overlay">
                                                     <img src={JSON.parse(item.metadata).url} alt="" />
                                                     <div className="figure-overlay">
-                                                        <p className="figure-overlay" style={item.status == CONST.token_status.FIXED_PRICE || item.status == CONST.token_status.AUCTION? {}: style_hidden}>PURCHASING!</p>
+                                                        <p className="figure-overlay" style={item.status == CONST.token_status.FIXED_PRICE || item.status == CONST.token_status.AUCTION? {}: style_hidden}>{t('PURCHASING!')}</p>
                                                         {/* <div className="figure-like"><i className="far fa-heart"></i></div> */}
                                                         {/* <a className="figure-link" href="#">
                                                             <span className="txt">Place a bid</span>
@@ -328,7 +328,7 @@ class Search extends React.Component {
                                                 </div>
                                                 <div className="sb-main-item-tsb info-block-tsb">
                                                     <div className="ttl">
-                                                        {item.token_name}
+                                                        <p className="name">{item.token_name}</p>
                                                         <p className="ttl-mark eth-mark">{item.type == CONST.protocol_type.ERC721? "#" + item.token_id: item.owned_cnt + " / " + item.total_supply}</p>
                                                     </div>
                                                     <div className="stock">
@@ -375,7 +375,7 @@ class Search extends React.Component {
                     <div className="popup-box">
                         <div className="loading-popup-head">
                             <div className="loader"></div>
-                            <p className="loading-popup-head-ttl">Please wait...</p>
+                            <p className="loading-popup-head-ttl">{t('Please wait...')}</p>
                         </div>
                     </div>
                 </div>

@@ -1,23 +1,21 @@
 var config = {
     chain_id : 0x61, //56: mainnet, 97: testnet 
     blockexplorer_url: 'https://bscscan.com/',
-    //backend_url: 'http://192.168.2.103:4000',
-    backend_url: 'https://192.168.2.103:4443',
-    avatar_url: 'http://192.168.2.103/caribnft/avatars/',
-    cover_url: 'http://192.168.2.103/caribnft/covers/',
-    preview_url: 'http://192.168.2.103/caribnft/preview/',
-    token_url: 'http://192.168.2.103/caribnft/tokens/',
-    //host_url: 'http://192.168.2.103:3000',
-    host_url: 'https://localhost:3000',
+    backend_url: 'https://caribsea.io:4001',
+    avatar_url: 'https://caribsea.io:82/caribnft/avatars/',
+    cover_url: 'https://caribsea.io:82/caribnft/covers/',
+    preview_url: 'https://caribsea.io:82/caribnft/preview/',
+    token_url: 'https://caribsea.io:82/caribnft/tokens/',
+    host_url: 'https://caribsea.io',
 
     contracts: {
         bsc: {
-            contract_erc721_transfer_proxy: '0xf141Ffb4403C017C10a389A4A86faC51Ba9E07F6',
-            contract_erc20_transfer_proxy: '0x45C0e2c69Ebc0971a5df16bDB1879050963ccBd4',
-            contract_exchange: '0x3E2a8b6B84b22bd0d9E868c9314a6A23d6951487',
-            contract_exchange_erc1155: '0xdc7d9FdF39F234AfC713cab4f5C73aA8b98F07b0',
-            contract_caribmars: '0xA5498618C2e999E93A376427cE480C992AEa4d97',
-            contract_erc1155: '0x888680336E42a372b1E70B0F479bf9d1B03699Ee',
+            contract_erc721_transfer_proxy: '0x5f8aD14C22db0989353Bb78512FC1444EAB35641',
+            contract_erc20_transfer_proxy: '0x64a1545A0De80f426a211e8D498A0e5dCE581215',
+            contract_exchange: '0x3A74ebceCFB08D22EfE5472cBE151D12f671d4d0',
+            contract_exchange_erc1155: '0x5e2aFDd44bdd8fFb5d7Ac18869c5d3a0DC3782Ad',
+            contract_caribmars: '0xD923F0eDA700a27457A46791Ae3aFD25F89Ad996',
+            contract_erc1155: '0x00f8eFE8Bdd64D0e2b6548041e8755070619c044',
         },
         ethereum: {
             contract_erc721_transfer_proxy: '0x310a88C187Ea383e3406dE58DB71CdC40Ed20323',

@@ -5,8 +5,12 @@ import {AddClass, ChangeClass} from '../js/common';
 import config from '../globals/config';
 import CONST from '../globals/constants';
 import InstagramLogin from '@amraneze/react-instagram-login';
+import InstagramEmbed from 'react-instagram-embed';
 import axios from 'axios';
+import oauth from 'axios-oauth-client';
 import $ from 'jquery';
+
+process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
 
 class UploadInstagramPage extends React.Component {
     constructor(props) {
@@ -15,19 +19,19 @@ class UploadInstagramPage extends React.Component {
         this.state = {          
           isLoggedIn: false,
           userID: '',
-          user_name: '',
-          oauth_token: '',
-          tweets_list: [],
+          code: '',
+          access_token: '',
+          media_list: [],
           show_loading: true,
         };
 
         ChangeClass('upload');
-        AddClass('has-popup');
+        AddClass('has-popup');  
     }
 
-    async getTweetsList(user_id) {
+    async getInstagramList() {
       this.showLoading();
-      axios.get(config.cors_url + config.twitter_api_url+'2/users/'+ user_id +'/tweets?max_results=' + config.twitter_get_count, {
+      axios.get(config.instagram_api_url+'v11.0/' + this.state.userID +'/tweets?max_results=' + config.twitter_get_count, {
         headers: {
           'Authorization': 'Bearer ' + config.twitter_bearer_token,
           "Access-Control-Allow-Origin": "*",
@@ -47,7 +51,7 @@ class UploadInstagramPage extends React.Component {
     }
 
     async onTweetCreate(tweet_id){
-      document.location = "/upload/snsdetail/"+ CONST.token_type.SINGLE + "/" + CONST.sns_type.TWITTER + "/" + tweet_id + "/" + this.state.oauth_token;
+      window.location = config.host_url + "/upload/snsdetail/"+ CONST.token_type.SINGLE + "/" + CONST.sns_type.TWITTER + "/" + tweet_id + "/" + this.state.oauth_token;
     }
 
     showLoading() {
@@ -66,14 +70,41 @@ class UploadInstagramPage extends React.Component {
       $("#loading-popup").fadeOut(100);
     }
 
+    async getAccessToken() {
+      const res = oauth.client(axios.create(), {
+        url: config.instagram_api_url+'oauth/access_token',
+        grant_type: 'authorization_code',
+        client_id: config.instagram_app_id,
+        client_secret: config.instagram_app_secret,
+        code: this.state.code,
+        redirect_uri: window.location.href,
+      });
+      
+      const response = await res();
+
+      console.log(response);
+
+      if (response.access_token) {
+        axios.get(config.instagram_graph_api_url+'access_token?grant_type=ig_exchange_token&client_secret=' + config.instagram_app_secret +'/access_token=' + response.access_token, {
+          })
+          .then((res) => {
+            if (res.access_token) {
+                this.setState({access_token: res.access_token});
+            }
+          })
+          .catch((err) => {
+              console.log(err);
+          })
+      } else {
+        alert('Instagram auth failed');
+      }
+    }
+
     responseInstagram = (res) => {
       console.log(res);
-      if (res != null) {
-        this.setState({ isLoggedIn: true});
-        this.setState({ userID: res.user_id});
-        this.setState({ user_name: res.screen_name});
-        this.setState({ oauth_token: res.oauth_token});
-        this.getTweetsList(res.user_id);
+      if (res.error == null) {
+        this.setState({ code: res});
+        this.getAccessToken();
       } else {
         this.setState({ isLoggedIn: false});
       }
@@ -86,30 +117,30 @@ class UploadInstagramPage extends React.Component {
               <div className="content sns-div align-center">
                 {!this.state.isLoggedIn &&
                 <InstagramLogin
-                    clientId="5fd2f11482844c5eba963747a5f34556"
+                    clientId={config.instagram_app_id}
                     buttonText="Login with Instagram"
                     onSuccess={this.responseInstagram}
                     onFailure={this.responseInstagram}
+                    scope="user_profile,user_media"
                 />
                 }
                 {this.state.isLoggedIn &&
-                  this.state.tweets_list.map((item, index) => {
-                    if (this.state.tweets_list.length == index + 1) {
-                      return (
-                        <div className="sns-div-item">
-                          <a className="btn btn-h32 btn-blue" onClick={() => this.onTweetCreate(item.id)}><span>Create NFT</span></a>
-                          
-                        </div>
-                      )
-                    } else {
-                      return (
-                        <div className="sns-div-item">
-                          <a className="btn btn-h32 btn-blue" onClick={() => this.onTweetCreate(item.id)}><span>Create NFT</span></a>
-                          
-                        </div>
-                      )
-                    }
-                  })
+                  <div className="sns-div-item">
+                    <a className="btn btn-h32 btn-blue" onClick={() => this.onTweetCreate()}><span>Create NFT</span></a>
+                    <InstagramEmbed
+                      url='https://instagr.am/p/Zw9o4/'
+                      clientAccessToken={config.instagram_app_id + '|' + this.state.access_token}
+                      maxWidth={320}
+                      hideCaption={false}
+                      containerTagName='div'
+                      protocol=''
+                      injectScript
+                      onLoading={() => {}}
+                      onSuccess={() => {}}
+                      onAfterRender={() => {}}
+                      onFailure={() => {}}
+                    />
+                  </div>
                 }
               </div>
           </section>

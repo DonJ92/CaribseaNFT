@@ -20,7 +20,9 @@ class PickUp extends React.Component {
             tokens: [],
             users: []
         };
+    }
 
+    componentDidMount() {
         this.getLastTokens();
         this.getLastUsers();
     }
@@ -83,13 +85,13 @@ class PickUp extends React.Component {
                     );
                 }
 
-                pick_01_stock = this.state.tokens[0].bids.length + t(" in stock");
+                pick_01_stock = t("in stock", {count: this.state.tokens[0].bids.length});
             } else {
                 pick_01_stock = t("Not sell");
             }
 
             pick_01 = (
-                <div className="pickup-01-inner" onClick={() => document.location="/item/" + this.state.tokens[0].id}>
+                <div className="pickup-01-inner" onClick={() => window.location = config.host_url + "/item/" + this.state.tokens[0].id}>
                     <div className="pickup-01-figure">
                         <img src={JSON.parse(this.state.tokens[0].metadata).url} alt="" />
                     </div>
@@ -151,7 +153,7 @@ class PickUp extends React.Component {
                                             <div className="pickup-02-item">
                                                 <div className="pickup-02-figure">
                                                     <img src={JSON.parse(item.metadata).url} alt="" />
-                                                    <a onClick={() => document.location="/item/" + item.id}><i className="fas fa-long-arrow-alt-right"></i></a>
+                                                    <a onClick={() => window.location = config.host_url + "/item/" + item.id}><i className="fas fa-long-arrow-alt-right"></i></a>
                                                 </div>
                                                 <div className="pickup-02-infos">
                                                     <p className="pickup-02-infos-ttl">{item.token_name} {item.type == CONST.protocol_type.ERC721? "#" + item.token_id: item.owned_cnt + " / " + item.total_supply}</p>
@@ -178,7 +180,7 @@ class PickUp extends React.Component {
                                     {
                                         this.state.users.map((item, index) => {
                                             return (
-                                                <div className="pickup-03-item" onClick={() => document.location="/profile/" + item.address}>
+                                                <div className="pickup-03-item" onClick={() => window.location = config.host_url + "/profile/" + item.address}>
                                                     <div className="pickup-03-item-icon-wrapper">
                                                         <div className="pickup-03-item-icon icon icon-56">
                                                             <img src={config.avatar_url + item.address + ".png"} onError={this.onAvatarError} alt="" />

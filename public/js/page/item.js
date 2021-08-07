@@ -1,4 +1,3 @@
-/* javascriptのコードを記載 */
 $(document).ready(function() {
     $(document).on("click", function(event) {
         if (!$(event.target).closest(".shr-notice-popup").length) {
@@ -17,15 +16,15 @@ $(document).ready(function() {
         return false;
     });
 
-    $('#btn-purchase-now').click(function() {
-        $('#popup-checkout-01').fadeIn(100);
-        return false;
-    });
+    // $('#btn-purchase-now').click(function() {
+    //     $('#popup-checkout-01').fadeIn(100);
+    //     return false;
+    // });
 
-    $('#btn-erc1155-purchase-now').click(function() {
-        $('#popup-erc1155-checkout-01').fadeIn(100);
-        return false;
-    });
+    // $('#btn-erc1155-purchase-now').click(function() {
+    //     $('#popup-erc1155-checkout-01').fadeIn(100);
+    //     return false;
+    // });
 
     // $('#popup-purchase-01').click(function() {
     //     $('.popup').fadeOut(100);
@@ -39,17 +38,17 @@ $(document).ready(function() {
         return false;
     });
 
-    $('#btn-place-a-bid').click(function() {
-        // $('#popup-place-a-bid-01').fadeIn(100);
-        $('#popup-place-a-bid-02').fadeIn(100);
-        return false;
-    });
+    // $('#btn-place-a-bid').click(function() {
+    //     // $('#popup-place-a-bid-01').fadeIn(100);
+    //     $('#popup-place-a-bid-02').fadeIn(100);
+    //     return false;
+    // });
 
-    $('#btn-erc1155-place-a-bid').click(function() {
-        // $('#popup-place-a-bid-01').fadeIn(100);
-        $('#popup-erc1155-place-a-bid-02').fadeIn(100);
-        return false;
-    });
+    // $('#btn-erc1155-place-a-bid').click(function() {
+    //     // $('#popup-place-a-bid-01').fadeIn(100);
+    //     $('#popup-erc1155-place-a-bid-02').fadeIn(100);
+    //     return false;
+    // });
 
     $('#btn-show-place-a-bid-01').click(function() {
         $('.popup').fadeOut(100);

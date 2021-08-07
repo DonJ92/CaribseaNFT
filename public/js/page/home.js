@@ -24,7 +24,7 @@ $(document).ready(function() {
         return false;
     });
 
-    var ps_childs = document.getElementById("ps-slide-wrapper").children;
+    // var ps_childs = document.getElementById("ps-slide-wrapper").children;
     // if (ps_childs.length > 5) {
         var swiper_ps = new Swiper('#ps-slide', {
             cssWidthAndHeight: true,
@@ -39,7 +39,7 @@ $(document).ready(function() {
         });
     // }
 
-    var hb_childs = document.getElementById("hb-swiper-wrapper").children;
+    // var hb_childs = document.getElementById("hb-swiper-wrapper").children;
     // if (hb_childs.length > 4) {
         var swiper_hb = new Swiper('#hb-slide', {
             cssWidthAndHeight: true,
@@ -54,30 +54,30 @@ $(document).ready(function() {
         });
     // }
 
-    var swiper_hc = new Swiper('#hc-slide', {
-        cssWidthAndHeight: true,
-        slidesPerView: 'auto',
-        loop: true, 
-        visibilityFullFit: true,
-        autoResize: false,
-        navigation: {
-            prevEl: '#hot-collections .swiper-button-prev',
-            nextEl: '#hot-collections .swiper-button-next',
-        },
-    });
+    // var swiper_hc = new Swiper('#hc-slide', {
+    //     cssWidthAndHeight: true,
+    //     slidesPerView: 'auto',
+    //     loop: true, 
+    //     visibilityFullFit: true,
+    //     autoResize: false,
+    //     navigation: {
+    //         prevEl: '#hot-collections .swiper-button-prev',
+    //         nextEl: '#hot-collections .swiper-button-next',
+    //     },
+    // });
 
-    if ( /Android|webOS|iPhone|iPad|Mac|Macintosh|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ) {
-        var swiper_discover = new Swiper('#discover-slide', {
-            cssWidthAndHeight: true,
-            slidesPerView: 'auto',
-            spaceBetween: 16, 
-            loop: true, 
-            visibilityFullFit: true,
-            autoResize: false,
-            navigation: {
-                prevEl: '#discover .swiper-button-prev',
-                nextEl: '#discover .swiper-button-next',
-            },
-        });
-    }
+    // if ( /Android|webOS|iPhone|iPad|Mac|Macintosh|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ) {
+    //     var swiper_discover = new Swiper('#discover-slide', {
+    //         cssWidthAndHeight: true,
+    //         slidesPerView: 'auto',
+    //         spaceBetween: 16, 
+    //         loop: true, 
+    //         visibilityFullFit: true,
+    //         autoResize: false,
+    //         navigation: {
+    //             prevEl: '#discover .swiper-button-prev',
+    //             nextEl: '#discover .swiper-button-next',
+    //         },
+    //     });
+    // }
 });

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import '../styles/style.css';
 import {AddClass, ChangeClass} from '../js/common';
 import CONST from '../globals/constants';
+import config from '../globals/config';
 
 import upload_single from '../img/upload/upload-single.jpg'
 import upload_multiple from '../img/upload/upload-multiple.jpg';
@@ -34,13 +35,13 @@ class UploadType extends React.Component {
                             <div className="upload-lead-figure">
                                 <img src={upload_single} alt="" />
                             </div>
-                            <a className="btn btn-center" href={"/upload/detail/" + CONST.token_type.SINGLE}><span className="txt">{t('Create Single')}</span></a>
+                            <a className="btn btn-center" href={config.host_url + "/upload/detail/" + CONST.token_type.SINGLE}><span className="txt">{t('Create Single')}</span></a>
                         </div>
                         <div className="upload-lead-col">
                             <div className="upload-lead-figure">
                                 <img src={upload_multiple} alt="" />
                             </div>
-                            <a className="btn btn-center btn-blue" href={"/upload/detail/" + CONST.token_type.MULTIPLE}><span className="txt">{t('Create Multiple')}</span></a>
+                            <a className="btn btn-center btn-blue" href={config.host_url + "/upload/detail/" + CONST.token_type.MULTIPLE}><span className="txt">{t('Create Multiple')}</span></a>
                         </div>
                     </div>
 

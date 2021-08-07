@@ -156,7 +156,7 @@ class TopNFT extends React.Component {
                                                     </div> */}
                                                 </div>
                                                 {/* <a className="mv-infos-link blue" href="#"><span>Place a bid</span></a> */}
-                                                <a className="mv-infos-link" href={"/item/" + item.id}><span>{t('View item')}</span></a>
+                                                <a className="mv-infos-link" href={config.host_url + "/item/" + item.id}><span>{t('View item')}</span></a>
                                             </div>
                                         )
                                     })

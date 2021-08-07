@@ -7,7 +7,6 @@ import * as API from '../adapter/api';
 import config from '../globals/config';
 import CONST, { protocol_type, token_status } from '../globals/constants';
 import BalanceUtil from '../common/balance_util';
-import TimeUtil from '../common/time_util';
 import ERC721 from '../contract/ERC721.json';
 import ERC1155 from '../contract/ERC1155.json'
 import EXCHANGE from '../contract/Exchange.json';
@@ -22,6 +21,11 @@ import ls from 'local-storage';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, ReferenceLine, ReferenceArea,
     ReferenceDot, Tooltip, CartesianGrid, Legend, Brush, ErrorBar, AreaChart, Area,
     Label, LabelList } from 'recharts';
+import provider_util from '../common/provider_util';
+import base64 from 'base-64';
+import {Timeline, Tweet} from 'react-twitter-widgets';
+import YouTube from 'react-youtube';
+import BASE64 from '../common/BASE64';
 
 import mv from '../img/item/mv.png';
 import icon_avatar_01 from '../img/common/icon-avatar-01.png';
@@ -33,10 +37,10 @@ class Item extends React.Component {
     constructor(props) {
         super(props);
 
-        var script = document.createElement('script');
-        script.src = '../../js/page/item.js';
-        script.async = true;
-        document.body.appendChild(script);
+        // var script = document.createElement('script');
+        // script.src = './js/page/item.js';
+        // script.async = false;
+        // document.body.appendChild(script);
 
         ChangeClass('item');
         AddClass('has-popup');
@@ -80,6 +84,7 @@ class Item extends React.Component {
         // this.getAccount();
         this.tickPrice();
         this.getAllTick();
+        this.getAccount();
         setInterval(this.tickPrice.bind(this), 3000);
     }
 
@@ -138,8 +143,9 @@ class Item extends React.Component {
             this.setState( {
                 all_tick: res
             });
-
-            this.getAccount();
+        })
+        .catch((err) => {
+            console.log(err);
         })
     }
 
@@ -155,8 +161,15 @@ class Item extends React.Component {
         return 0;
     }
 
-    getAccount() {
-        const web3 = new Web3(Web3.givenProvider);
+    async getAccount() {
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            this.getTokenInfo();
+            return;
+        }
+
+        const web3 = new Web3(provider);
         web3.eth.getAccounts((error,result) => {
             if (error) {
                 console.log(error);
@@ -175,9 +188,11 @@ class Item extends React.Component {
                     });
 
                     web3.eth.getBalance(this.state.selectedAddress, (err, balance) => {
-                        this.setState({
-                            balance: web3.utils.fromWei(balance, "ether")
-                        });
+                        if (balance != null) {
+                            this.setState({
+                                balance: web3.utils.fromWei(balance, "ether")
+                            });
+                        }
                     });
 
                     API.get_profile(this.state.selectedAddress)
@@ -196,11 +211,9 @@ class Item extends React.Component {
         });
     }
 
-    getTokenInfo() {
-        const web3 = new Web3(Web3.givenProvider);
-
+    async getTokenInfo() {
         API.get_token_info(this.props.id)
-        .then((res) => {console.log(res);
+        .then(async (res) => {console.log(res);
             if (res.result) {
                 this.setState({
                     token_info: res.info
@@ -303,6 +316,14 @@ class Item extends React.Component {
                         return;
                     }
 
+                    var provider = await provider_util.get_current_provider();
+
+                    if (provider == null) {
+                        return;
+                    }
+
+                    const web3 = new Web3(provider);
+
                     const ASSET = new web3.eth.Contract(ContractUtil.get_abi(res.info.token.auction_asset_id, this.state.token_info.token.chain_id), res.info.token.auction_asset_id);
                     ASSET.methods.balanceOf(this.state.selectedAddress).call({from : this.state.selectedAddress})
                     .then((res) => {
@@ -374,6 +395,7 @@ class Item extends React.Component {
     }
 
     validFeeDistribution() {
+        const { t } = this.props;
         var trs = $("#fee_distribution_tbody").children();
         var total = 0;
 
@@ -391,7 +413,7 @@ class Item extends React.Component {
             var fee_percentage = trs[i].childNodes[1].children[0].value;
 
             if (address == "") {
-                alert("Please input receiver address.");
+                alert(t("Please input receiver address."));
                 return ret;
             }
 
@@ -399,13 +421,13 @@ class Item extends React.Component {
                 fee_percentage = parseInt(fee_percentage);
 
                 if (fee_percentage <= 0 || fee_percentage > 100) {
-                    alert("Please input valid percentage.");
+                    alert(t("Please input valid percentage."));
                     return ret;
                 }
 
                 total += fee_percentage;
             } catch {
-                alert("Please input decimal percentage.");
+                alert(t("Please input decimal percentage."));
                 return ret;
             }
 
@@ -414,7 +436,7 @@ class Item extends React.Component {
         }
 
         if (total != 100) {
-            alert("The sum of percentage must be 100.");
+            alert(t("The sum of percentage must be 100."));
             return ret;
         }
 
@@ -424,10 +446,21 @@ class Item extends React.Component {
         return ret;
     }
 
-    handleFeeDistribution() {
+    async handleFeeDistribution() {
+        const { t } = this.props;
         var validResult = this.validFeeDistribution();
 
         if (!validResult.valid) return;
+
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
 
         this.showLoading();
 
@@ -441,18 +474,12 @@ class Item extends React.Component {
             distributions.push(distribution);
         }
 
-        if (window.ethereum.chainId != this.state.token_info.token.chain_id) {
-            this.callbackError('Please select correct network.');
-            return;
-        }
-
-        const web3 = new Web3(Web3.givenProvider);
         const NFT = new web3.eth.Contract(ERC721.abi, this.state.token_info.token.token_contract_id);
         NFT.methods.setFeeDistributionPercentage(
             validResult.fee_receivers,
             validResult.fee_percentages
         ).send({from: this.state.selectedAddress})
-        .on('error', () => this.callbackError('An error occured while sending token.'))
+        .on('error', () => this.callbackError(t('An error occured while setting fee distribution.')))
         .then((res) => {console.log(res);
             API.set_fee_distribution(this.state.token_info.token.token_contract_id, distributions)
             .then((res) => {
@@ -512,55 +539,76 @@ class Item extends React.Component {
         }
     }
 
-    handleTransfer() {
+    async isCorrectNetwork() {
+        const { t } = this.props;
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
+        var chain_id = await web3.eth.net.getId();
+        if (chain_id != this.state.token_info.token.chain_id) {
+            alert(t('Please select correct network.'));
+            return false;
+        }
+
+        return true;
+    }
+
+    async handleTransfer() {
+        const { t } = this.props;
+        if (!await this.isCorrectNetwork()) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
 
-        const web3 = new Web3(Web3.givenProvider);
-
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
-                this.hideLoading();
-                alert("please connect to correct network.")
-                return;
-            } else {
-                const NFT = new web3.eth.Contract(ERC721.abi, this.state.token_info.token.token_contract_id);
-                NFT.methods.transferFrom(this.state.selectedAddress, this.state.transfer_to_address, this.state.token_info.token.token_id).send({from: this.state.selectedAddress})
-                .on('error', () => this.callbackError('An error occured while sending token.'))
-                .then((res) => {console.log(res);
-                    API.transfer_token(this.state.token_info.token.token_contract_id, this.state.token_info.token.token_id, this.state.selectedAddress, this.state.transfer_to_address)
-                    .then((res) =>{
-                        if (res.result) {
-                            document.location = '/profile/' + this.state.selectedAddress;
-                        }
-                    })
-                });
-            }
+        const NFT = new web3.eth.Contract(ERC721.abi, this.state.token_info.token.token_contract_id);
+        NFT.methods.transferFrom(this.state.selectedAddress, this.state.transfer_to_address, this.state.token_info.token.token_id).send({from: this.state.selectedAddress})
+        .on('error', () => this.callbackError(t('An error occured while sending token.')))
+        .then((res) => {console.log(res);
+            API.transfer_token(this.state.token_info.token.token_contract_id, this.state.token_info.token.token_id, this.state.selectedAddress, this.state.transfer_to_address)
+            .then((res) =>{
+                if (res.result) {
+                    window.location = config.host_url + '/profile/' + this.state.selectedAddress;
+                }
+            })
         });
     }
 
-    handleERC1155Transfer() {
+    async handleERC1155Transfer() {
+        const { t } = this.props;
+        if (!await this.isCorrectNetwork()) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
 
-        const web3 = new Web3(Web3.givenProvider);
-
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
-                this.hideLoading();
-                alert("Please connect to correct network.")
-                return;
-            } else {
-                const NFT = new web3.eth.Contract(ERC1155, this.state.token_info.token.token_contract_id);
-                NFT.methods.safeTransferFrom(this.state.selectedAddress, this.state.transfer_to_address, this.state.token_info.token.token_id, this.state.transfer_amount).send({from: this.state.selectedAddress})
-                .on('error', () => this.callbackError('An error occured while sending token.'))
-                .then((res) => {console.log(res);
-                    API.transfer_erc1155_token(this.props.id, this.state.selectedAddress, this.state.transfer_to_address, this.state.transfer_amount)
-                    .then((res) =>{
-                        if (res.result) {
-                            document.location = '/profile/' + this.state.selectedAddress;
-                        }
-                    })
-                });
-            }
+        const NFT = new web3.eth.Contract(ERC1155, this.state.token_info.token.token_contract_id);
+        NFT.methods.safeTransferFrom(this.state.selectedAddress, this.state.transfer_to_address, this.state.token_info.token.token_id, this.state.transfer_amount).send({from: this.state.selectedAddress})
+        .on('error', () => this.callbackError(t('An error occured while sending token.')))
+        .then((res) => {console.log(res);
+            API.transfer_erc1155_token(this.props.id, this.state.selectedAddress, this.state.transfer_to_address, this.state.transfer_amount)
+            .then((res) =>{
+                if (res.result) {
+                    window.location = config.host_url + '/profile/' + this.state.selectedAddress;
+                }
+            })
         });
     }
 
@@ -631,6 +679,7 @@ class Item extends React.Component {
     }
 
     sellRequest() {
+        const { t } = this.props;
         var asset_id = 'NONE';
         if (this.state.sell_type == CONST.token_status.AUCTION) {
             asset_id = document.getElementById("sale_asset").value;
@@ -643,7 +692,7 @@ class Item extends React.Component {
             if (res.result) {
                 document.location.reload();
             } else {
-                this.callbackError('An error occured while ordering.')
+                this.callbackError(t('An error occured while ordering.'));
             }
         });
     }
@@ -659,91 +708,106 @@ class Item extends React.Component {
             this.hideLoading();
 
             if (res.result) {
-                document.location = "/profile/" + this.state.selectedAddress;
+                window.location = config.host_url + "/profile/" + this.state.selectedAddress;
             }
         });
     }
 
     async handleApprove() {
+        const { t } = this.props;
+
         if (!this.isElementEnabled("sell_approve")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
-        this.showLoading();
-        const web3 = new Web3(Web3.givenProvider);
+        if (!(await this.isCorrectNetwork())) return false;
 
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
-                this.hideLoading();
-                alert("please connect to correct network.")
-                return;
-            } else {
-                const NFT = new web3.eth.Contract(ERC721.abi, this.state.token_info.token.token_contract_id);
-                NFT.methods.approve(network_util.get_erc721_transfer_proxy_address(this.state.token_info.token.chain_id), this.state.token_info.token.token_id).send({from: this.state.selectedAddress})
-                .on('error', () => this.callbackError('An error occured while approving token.'))
-                .then((res) => {
-                    this.hideLoading();
-                    document.getElementById("sell_approve").classList.add('btn-ready');
-                    document.getElementById("sell_order").classList.remove('btn-ready');
-                });
-            }
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
+        this.showLoading();
+
+        const NFT = new web3.eth.Contract(ERC721.abi, this.state.token_info.token.token_contract_id);
+        NFT.methods.approve(network_util.get_erc721_transfer_proxy_address(this.state.token_info.token.chain_id), this.state.token_info.token.token_id).send({from: this.state.selectedAddress})
+        .on('error', () => this.callbackError(t('An error occured while approving token.')))
+        .then((res) => {
+            this.hideLoading();
+            document.getElementById("sell_approve").classList.add('btn-ready');
+            document.getElementById("sell_order").classList.remove('btn-ready');
         });
     }
 
     async handleERC1155Approve() {
+        const { t } = this.props;
+
         if (!this.isElementEnabled("erc1155_sell_approve")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
-        this.showLoading();
-        const web3 = new Web3(Web3.givenProvider);
+        if (!await this.isCorrectNetwork()) return;
 
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
-                this.hideLoading();
-                alert("please connect to correct network.")
-                return;
-            } else {
-                const NFT = new web3.eth.Contract(ERC1155, network_util.get_erc1155(this.state.token_info.token.chain_id));
-                NFT.methods.approve(this.state.token_info.token.token_id, this.state.sale_amount, network_util.get_exchange_erc1155(this.state.token_info.token.chain_id)).send({from: this.state.selectedAddress})
-                .on('error', () => this.callbackError('An error occured while approving token.'))
-                .then((res) => {console.log(res);
-                    this.hideLoading();
-                    document.getElementById("erc1155_sell_approve").classList.add('btn-ready');
-                    document.getElementById("erc1155_sell_order").classList.remove('btn-ready');
-                });
-            }
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
+        this.showLoading();
+
+        const NFT = new web3.eth.Contract(ERC1155, network_util.get_erc1155(this.state.token_info.token.chain_id));
+        NFT.methods.approve(this.state.token_info.token.token_id, this.state.sale_amount, network_util.get_exchange_erc1155(this.state.token_info.token.chain_id)).send({from: this.state.selectedAddress})
+        .on('error', () => this.callbackError(t('An error occured while approving token.')))
+        .then((res) => {console.log(res);
+            this.hideLoading();
+            document.getElementById("erc1155_sell_approve").classList.add('btn-ready');
+            document.getElementById("erc1155_sell_order").classList.remove('btn-ready');
         });
     }
 
     async handleSellRequest() {
+        const { t } = this.props;
         if (!this.isElementEnabled("sell_order")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
-        this.showLoading();
+        if (!await this.isCorrectNetwork()) return;
 
-        const web3 = new Web3(Web3.givenProvider);
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
+        this.showLoading();
 
         const Exchange = new web3.eth.Contract(EXCHANGE.abi, network_util.get_exchange(this.state.token_info.token.chain_id));
 
         if (this.state.sell_type == CONST.token_status.AUCTION) {
             Exchange.methods.AuctionRequest(this.state.token_info.token.token_contract_id, this.state.token_info.token.token_id, document.getElementById("sale_asset").value)
             .send({from: this.state.selectedAddress, value:Web3.utils.toWei(config.listing_fee + '', 'ether')})
-            .on('error', () => this.callbackError('An error occured while ordering.'))
+            .on('error', () => this.callbackError(t('An error occured while ordering.')))
             .then((res) => {console.log(res);
                 this.sellRequest();
             });
         } else {
             Exchange.methods.BuyRequest(this.state.token_info.token.token_contract_id, this.state.token_info.token.token_id, Web3.utils.toWei(this.state.sell_price + '', 'ether'))
             .send({from: this.state.selectedAddress, value:Web3.utils.toWei(config.listing_fee + '', 'ether')})
-            .on('error', () => this.callbackError('An error occured while ordering.'))
+            .on('error', () => this.callbackError(t('An error occured while ordering.')))
             .then((res) => {console.log(res);
                 this.sellRequest();
             });
@@ -751,29 +815,38 @@ class Item extends React.Component {
     }
 
     async handleERC1155SellRequest() {
+        const { t } = this.props;
         if (!this.isElementEnabled("erc1155_sell_order")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
-        this.showLoading();
+        if (!(await this.isCorrectNetwork())) return false;
 
-        const web3 = new Web3(Web3.givenProvider);
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
+        this.showLoading();
 
         const Exchange = new web3.eth.Contract(EXCHANGEERC1155.abi, network_util.get_exchange_erc1155(this.state.token_info.token.chain_id));
 
         if (this.state.sell_type == CONST.token_status.AUCTION) {
             Exchange.methods.AuctionERC1155Request(this.state.token_info.token.token_id, this.state.sale_amount, document.getElementById("erc1155_sale_asset").value)
             .send({from: this.state.selectedAddress, value:Web3.utils.toWei(config.listing_fee + '', 'ether')})
-            .on('error', () => this.callbackError('An error occured while ordering.'))
+            .on('error', () => this.callbackError(t('An error occured while ordering.')))
             .then((res) => {console.log(res);
                 this.ERC1155SellRequest();
             });
         } else {
             Exchange.methods.BuyERC1155Request(this.state.token_info.token.token_id, this.state.sale_amount, Web3.utils.toWei(this.state.sell_price + '', 'ether'))
             .send({from: this.state.selectedAddress, value:Web3.utils.toWei(config.listing_fee + '', 'ether')})
-            .on('error', () => this.callbackError('An error occured while ordering.'))
+            .on('error', () => this.callbackError(t('An error occured while ordering.')))
             .then((res) => {console.log(res);
                 this.ERC1155SellRequest();
             });
@@ -781,85 +854,86 @@ class Item extends React.Component {
     }
 
     async handlePurchase() {
+        const { t } = this.props;
         if (!this.isElementEnabled("popup-purchase-01")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
 
-        const web3 = new Web3(Web3.givenProvider);
-
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
+        const Exchange = new web3.eth.Contract(EXCHANGE.abi, network_util.get_exchange(this.state.token_info.token.chain_id));
+        Exchange.methods.buy(
+            this.state.token_info.token.token_contract_id,
+            this.state.token_info.token.token_id,
+            this.state.token_info.owner.address,
+            Web3.utils.toWei(this.state.token_info.token.price + '', 'ether'),
+            this.state.selectedAddress
+        ).send({from: this.state.selectedAddress, value: Web3.utils.toWei(this.state.token_info.token.price + '', 'ether')})
+        .on('error', () => this.callbackError(t('An error occured while purchasing token.')))
+        .then((res) => {console.log(res);
+            this.setState({
+                buy_tx_id: res.transactionHash
+            });
+            API.buy_token(this.props.id, this.state.token_info.token.owner, this.state.selectedAddress, this.state.token_info.token.price)
+            .then((res) => {console.log(res);
                 this.hideLoading();
-                
-                alert("please connect to correct network.")
-                return;
-            } else {
-                const Exchange = new web3.eth.Contract(EXCHANGE.abi, network_util.get_exchange(this.state.token_info.token.chain_id));
-                Exchange.methods.buy(
-                    this.state.token_info.token.token_contract_id,
-                    this.state.token_info.token.token_id,
-                    this.state.token_info.owner.address,
-                    Web3.utils.toWei(this.state.token_info.token.price + '', 'ether'),
-                    this.state.selectedAddress
-                ).send({from: this.state.selectedAddress, value: Web3.utils.toWei(this.state.token_info.token.price + '', 'ether')})
-                .on('error', () => this.callbackError('An error occured while purchasing token.'))
-                .then((res) => {console.log(res);
-                    this.setState({
-                        buy_tx_id: res.transactionHash
-                    });
-                    API.buy_token(this.props.id, this.state.token_info.token.owner, this.state.selectedAddress, this.state.token_info.token.price)
-                    .then((res) => {console.log(res);
-                        this.hideLoading();
-                        document.getElementById("popup-purchase-02").click();
-                    })
-                })
-            }
-        });
+                document.getElementById("popup-purchase-02").click();
+            })
+        })
     }
 
     async handleERC1155Purchase() {
+        const { t } = this.props;
         if (!this.isElementEnabled("popup-erc1155-purchase-01")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
 
-        const web3 = new Web3(Web3.givenProvider);
-
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
+        const Exchange = new web3.eth.Contract(EXCHANGEERC1155.abi, network_util.get_exchange_erc1155(this.state.token_info.token.chain_id));
+        Exchange.methods.buyERC1155(
+            this.state.token_info.token.token_id,
+            this.state.token_info.token.owned_cnt,
+            this.state.token_info.owner.address,
+            Web3.utils.toWei(this.state.token_info.token.price + '', 'ether'),
+            this.state.selectedAddress
+        ).send({from: this.state.selectedAddress, value: Web3.utils.toWei(this.state.token_info.token.price + '', 'ether')})
+        .on('error', () => this.callbackError(t('An error occured while purchasing token.')))
+        .then((res) => {console.log(res);
+            this.setState({
+                buy_tx_id: res.transactionHash
+            });
+            API.buy_erc1155_token(this.props.id, this.state.token_info.token.owner, this.state.selectedAddress, this.state.token_info.token.price)
+            .then((res) => {console.log(res);
                 this.hideLoading();
-                
-                alert("please connect to correct network.")
-                return;
-            } else {
-                const Exchange = new web3.eth.Contract(EXCHANGEERC1155.abi, network_util.get_exchange_erc1155(this.state.token_info.token.chain_id));
-                Exchange.methods.buyERC1155(
-                    this.state.token_info.token.token_id,
-                    this.state.token_info.token.owned_cnt,
-                    this.state.token_info.owner.address,
-                    Web3.utils.toWei(this.state.token_info.token.price + '', 'ether'),
-                    this.state.selectedAddress
-                ).send({from: this.state.selectedAddress, value: Web3.utils.toWei(this.state.token_info.token.price + '', 'ether')})
-                .on('error', () => this.callbackError('An error occured while purchasing token.'))
-                .then((res) => {console.log(res);
-                    this.setState({
-                        buy_tx_id: res.transactionHash
-                    });
-                    API.buy_erc1155_token(this.props.id, this.state.token_info.token.owner, this.state.selectedAddress, this.state.token_info.token.price)
-                    .then((res) => {console.log(res);
-                        this.hideLoading();
-                        document.getElementById("popup-purchase-02").click();
-                    })
-                })
-            }
-        });
+                document.getElementById("popup-purchase-02").click();
+            })
+        })
     }
 
     handleSaleAssetChanged() {
@@ -933,93 +1007,102 @@ class Item extends React.Component {
     }
 
     async handleBidApprove() {
+        const { t } = this.props;
         if (!this.isElementEnabled("bid_approve")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
 
-        const web3 = new Web3(Web3.givenProvider);
+        API.get_total_bid_amount(this.state.selectedAddress, this.state.token_info.token.auction_asset_id)
+        .then((res) => {
+            if (res.result) {
+                const web3 = new Web3(Web3.givenProvider);
 
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
-                this.hideLoading();
-                
-                alert("please connect to correct network.")
-                return;
+                const ASSET = new web3.eth.Contract(ContractUtil.get_abi(this.state.token_info.token.auction_asset_id, this.state.token_info.token.chain_id), this.state.token_info.token.auction_asset_id);
+                ASSET.methods.approve(network_util.get_erc20_transfer_proxy(this.state.token_info.token.chain_id), Web3.utils.toWei((res.total + this.state.bid_amount) + '', 'ether')).send({from : this.state.selectedAddress})
+                .on('error', () => this.callbackError(t('An error occured while approving token.')))
+                .then((res) => {console.log(res);
+                    this.hideLoading();
+                    document.getElementById("bid_approve").classList.add('btn-ready');
+                    document.getElementById("bid_request").classList.remove('btn-ready');
+                });
             } else {
-                API.get_total_bid_amount(this.state.selectedAddress, this.state.token_info.token.auction_asset_id)
-                .then((res) => {
-                    if (res.result) {
-                        const web3 = new Web3(Web3.givenProvider);
-        
-                        const ASSET = new web3.eth.Contract(ContractUtil.get_abi(this.state.token_info.token.auction_asset_id, this.state.token_info.token.chain_id), this.state.token_info.token.auction_asset_id);
-                        ASSET.methods.approve(network_util.get_erc20_transfer_proxy(this.state.token_info.token.chain_id), Web3.utils.toWei((res.total + this.state.bid_amount) + '', 'ether')).send({from : this.state.selectedAddress})
-                        .on('error', () => this.callbackError('An error occured while approving token.'))
-                        .then((res) => {console.log(res);
-                            this.hideLoading();
-                            document.getElementById("bid_approve").classList.add('btn-ready');
-                            document.getElementById("bid_request").classList.remove('btn-ready');
-                        });
-                    } else {
-                        this.hideLoading();
-                    }
-                })
+                this.hideLoading();
             }
         })
     }
 
     async handleERC1155BidApprove() {
+        const { t } = this.props;
         if (!this.isElementEnabled("erc1155_bid_approve")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
 
-        const web3 = new Web3(Web3.givenProvider);
+        API.get_total_bid_amount(this.state.selectedAddress, this.state.token_info.token.auction_asset_id)
+        .then((res) => {
+            if (res.result) {
+                const web3 = new Web3(Web3.givenProvider);
 
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
-                this.hideLoading();
-                
-                alert("please connect to correct network.")
-                return;
+                const ASSET = new web3.eth.Contract(ContractUtil.get_abi(this.state.token_info.token.auction_asset_id, this.state.token_info.token.chain_id), this.state.token_info.token.auction_asset_id);
+                ASSET.methods.approve(network_util.get_erc20_transfer_proxy(this.state.token_info.token.chain_id), Web3.utils.toWei((res.total + this.state.bid_amount) + '', 'ether')).send({from : this.state.selectedAddress})
+                .on('error', () => this.callbackError(t('An error occured while approving token.')))
+                .then((res) => {console.log(res);
+                    this.hideLoading();
+                    document.getElementById("erc1155_bid_approve").classList.add('btn-ready');
+                    document.getElementById("erc1155_bid_request").classList.remove('btn-ready');
+                });
             } else {
-                API.get_total_bid_amount(this.state.selectedAddress, this.state.token_info.token.auction_asset_id)
-                .then((res) => {
-                    if (res.result) {
-                        const web3 = new Web3(Web3.givenProvider);
-        
-                        const ASSET = new web3.eth.Contract(ContractUtil.get_abi(this.state.token_info.token.auction_asset_id, this.state.token_info.token.chain_id), this.state.token_info.token.auction_asset_id);
-                        ASSET.methods.approve(network_util.get_erc20_transfer_proxy(this.state.token_info.token.chain_id), Web3.utils.toWei((res.total + this.state.bid_amount) + '', 'ether')).send({from : this.state.selectedAddress})
-                        .on('error', () => this.callbackError('An error occured while approving token.'))
-                        .then((res) => {console.log(res);
-                            this.hideLoading();
-                            document.getElementById("erc1155_bid_approve").classList.add('btn-ready');
-                            document.getElementById("erc1155_bid_request").classList.remove('btn-ready');
-                        });
-                    } else {
-                        this.hideLoading();
-                    }
-                })
+                this.hideLoading();
             }
         })
     }
 
     async handleBidRequest() {
+        const { t } = this.props;
         if (!this.isElementEnabled("bid_request")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
-        this.showLoading();
+        if (!(await this.isCorrectNetwork())) return false;
 
-        const web3 = new Web3(Web3.givenProvider);
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
+        this.showLoading();
 
         const Exchange = new web3.eth.Contract(EXCHANGE.abi, network_util.get_exchange(this.state.token_info.token.chain_id));
         Exchange.methods.BidRequest(
@@ -1028,7 +1111,7 @@ class Item extends React.Component {
             this.state.token_info.token.auction_asset_id,
             Web3.utils.toWei(this.state.bid_amount + '', 'ether')
         ).send({from : this.state.selectedAddress})
-        .on('error', () => this.callbackError('An error occured while requesting a bid.'))
+        .on('error', () => this.callbackError(t('An error occured while requesting a bid.')))
         .then((res) => {console.log(res);
             API.bid_request(
                 this.props.id,
@@ -1044,15 +1127,24 @@ class Item extends React.Component {
     }
 
     async handleERC1155BidRequest() {
+        const { t } = this.props;
         if (!this.isElementEnabled("erc1155_bid_request")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
-        this.showLoading();
+        if (!(await this.isCorrectNetwork())) return;
 
-        const web3 = new Web3(Web3.givenProvider);
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
+        this.showLoading();
 
         console.log(network_util.get_exchange_erc1155(this.state.token_info.token.chain_id));
         console.log(Web3.utils.toWei(this.state.bid_amount + '', 'ether'));
@@ -1065,7 +1157,7 @@ class Item extends React.Component {
             this.state.token_info.token.auction_asset_id,
             Web3.utils.toWei(this.state.bid_amount + '', 'ether')
         ).send({from : this.state.selectedAddress})
-        .on('error', () => this.callbackError('An error occured while requesting a bid.'))
+        .on('error', () => this.callbackError(t('An error occured while requesting a bid.')))
         .then((res) => {console.log(res);
             API.erc1155_bid_request(
                 this.props.id,
@@ -1081,203 +1173,213 @@ class Item extends React.Component {
     }
 
     async handleBidCancel() {
+        const { t } = this.props;
         if (!this.isElementEnabled("bid_cancel_approve")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
-
-        const web3 = new Web3(Web3.givenProvider);
         
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
-                this.hideLoading();
-
-                alert("please connect to correct network.")
-                return;
-            } else {
-                const Exchange = new web3.eth.Contract(EXCHANGE.abi, network_util.get_exchange(this.state.token_info.token.chain_id));
-                Exchange.methods.CancelBid(
-                    this.state.token_info.token.token_contract_id,
-                    this.state.token_info.token.token_id,
-                    this.state.token_info.token.auction_asset_id
-                ).send({from : this.state.selectedAddress})
-                .on('error', () => this.callbackError('An error occured while canceling the bid.'))
-                .then((res) => {console.log(res);
-                    API.cancel_bid(
-                        this.props.id,
-                        this.state.selectedAddress
-                    ).then((res) => {
-                        if (res.result) {
-                            document.location.reload();
-                        }
-                    })
-                });
-            }
+        const Exchange = new web3.eth.Contract(EXCHANGE.abi, network_util.get_exchange(this.state.token_info.token.chain_id));
+        Exchange.methods.CancelBid(
+            this.state.token_info.token.token_contract_id,
+            this.state.token_info.token.token_id,
+            this.state.token_info.token.auction_asset_id
+        ).send({from : this.state.selectedAddress})
+        .on('error', () => this.callbackError(t('An error occured while canceling the bid.')))
+        .then((res) => {console.log(res);
+            API.cancel_bid(
+                this.props.id,
+                this.state.selectedAddress
+            ).then((res) => {
+                if (res.result) {
+                    document.location.reload();
+                }
+            })
         });
     }
 
     async handleERC1155BidCancel() {
+        const { t } = this.props;
         if (!this.isElementEnabled("erc1155_bid_cancel_approve")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
-
-        const web3 = new Web3(Web3.givenProvider);
         
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
-                this.hideLoading();
-
-                alert("please connect to correct network.")
-                return;
-            } else {
-                const Exchange = new web3.eth.Contract(EXCHANGEERC1155.abi, network_util.get_exchange_erc1155(this.state.token_info.token.chain_id));
-                Exchange.methods.CancelERC1155Bid(
-                    this.state.token_info.token.token_id,
-                    this.state.token_info.token.owned_cnt,
-                    this.state.token_info.token.auction_asset_id
-                ).send({from : this.state.selectedAddress})
-                .on('error', () => this.callbackError('An error occured while canceling the bid.'))
-                .then((res) => {console.log(res);
-                    API.cancel_erc1155_bid(
-                        this.props.id,
-                        this.state.selectedAddress
-                    ).then((res) => {
-                        if (res.result) {
-                            document.location.reload();
-                        }
-                    })
-                });
-            }
+        const Exchange = new web3.eth.Contract(EXCHANGEERC1155.abi, network_util.get_exchange_erc1155(this.state.token_info.token.chain_id));
+        Exchange.methods.CancelERC1155Bid(
+            this.state.token_info.token.token_id,
+            this.state.token_info.token.owned_cnt,
+            this.state.token_info.token.auction_asset_id
+        ).send({from : this.state.selectedAddress})
+        .on('error', () => this.callbackError(t('An error occured while canceling the bid.')))
+        .then((res) => {console.log(res);
+            API.cancel_erc1155_bid(
+                this.props.id,
+                this.state.selectedAddress
+            ).then((res) => {
+                if (res.result) {
+                    document.location.reload();
+                }
+            })
         });
     }
 
     async handleERC1155BidAccept() {
+        const { t } = this.props;
         if (!this.isElementEnabled("erc1155_bid_accept_approve")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
 
-        const web3 = new Web3(Web3.givenProvider);
-
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
-                this.hideLoading();
-
-                alert("please connect to correct network.")
-                return;
-            } else {
-                const Exchange = new web3.eth.Contract(EXCHANGEERC1155.abi, network_util.get_exchange_erc1155(this.state.token_info.token.chain_id));
-                Exchange.methods.exchangeERC1155(
-                    this.state.token_info.token.token_id,
-                    this.state.token_info.token.owned_cnt,
-                    this.state.selectedAddress,
-                    this.state.token_info.token.auction_asset_id,
-                    Web3.utils.toWei(this.state.token_info.bids[0].amount + '', 'ether'),
-                    this.state.token_info.bids[0].address
-                ).send({from: this.state.selectedAddress})
-                .on('error', () => this.callbackError('An error occured while processing the bid.'))
-                .then((res) => {console.log(res);
-                    API.accept_erc1155_bid(this.props.id)
-                    .then((res) => {
-                        document.location = "/profile/" + this.state.selectedAddress;
-                    })
-                });
-            }
+        const Exchange = new web3.eth.Contract(EXCHANGEERC1155.abi, network_util.get_exchange_erc1155(this.state.token_info.token.chain_id));
+        Exchange.methods.exchangeERC1155(
+            this.state.token_info.token.token_id,
+            this.state.token_info.token.owned_cnt,
+            this.state.selectedAddress,
+            this.state.token_info.token.auction_asset_id,
+            Web3.utils.toWei(this.state.token_info.bids[0].amount + '', 'ether'),
+            this.state.token_info.bids[0].address
+        ).send({from: this.state.selectedAddress})
+        .on('error', () => this.callbackError(t('An error occured while processing the bid.')))
+        .then((res) => {console.log(res);
+            API.accept_erc1155_bid(this.props.id)
+            .then((res) => {
+                window.location = config.host_url + "/profile/" + this.state.selectedAddress;
+            })
         });
     }
 
     async handleBidAccept() {
+        const { t } = this.props;
         if (!this.isElementEnabled("bid_accept_approve")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
 
-        const web3 = new Web3(Web3.givenProvider);
-
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
-                this.hideLoading();
-
-                alert("please connect to correct network.")
-                return;
-            } else {
-                const Exchange = new web3.eth.Contract(EXCHANGE.abi, network_util.get_exchange(this.state.token_info.token.chain_id));
-                Exchange.methods.exchange(
-                    this.state.token_info.token.token_contract_id,
-                    this.state.token_info.token.token_id,
-                    this.state.selectedAddress,
-                    this.state.token_info.token.auction_asset_id,
-                    Web3.utils.toWei(this.state.token_info.bids[0].amount + '', 'ether'),
-                    this.state.token_info.bids[0].address
-                ).send({from: this.state.selectedAddress})
-                .on('error', () => this.callbackError('An error occured while processing the bid.'))
-                .then((res) => {console.log(res);
-                    API.accept_bid(this.props.id)
-                    .then((res) => {
-                        document.location.reload();
-                    })
-                });
-            }
+        const Exchange = new web3.eth.Contract(EXCHANGE.abi, network_util.get_exchange(this.state.token_info.token.chain_id));
+        Exchange.methods.exchange(
+            this.state.token_info.token.token_contract_id,
+            this.state.token_info.token.token_id,
+            this.state.selectedAddress,
+            this.state.token_info.token.auction_asset_id,
+            Web3.utils.toWei(this.state.token_info.bids[0].amount + '', 'ether'),
+            this.state.token_info.bids[0].address
+        ).send({from: this.state.selectedAddress})
+        .on('error', () => this.callbackError(t('An error occured while processing the bid.')))
+        .then((res) => {console.log(res);
+            API.accept_bid(this.props.id)
+            .then((res) => {
+                document.location.reload();
+            })
         });
     }
 
     async handleStakeApprove() {
+        const { t } = this.props;
         if (!this.isElementEnabled("stake_approve")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
-        const web3 = new Web3(Web3.givenProvider);
 
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
-                this.hideLoading();
+        const NFT = new web3.eth.Contract(ERC721.abi, this.state.token_info.token.token_contract_id);
+        NFT.methods.approve(network_util.get_erc721_transfer_proxy_address(this.state.token_info.token.chain_id), this.state.token_info.token.token_id).send({from : this.state.selectedAddress})
+        .on('error', () => this.callbackError(t('An error occured while approving token.')))
+        .then((res) => {console.log(res);
+            document.getElementById("stake_approve").classList.add('btn-ready');
+            document.getElementById("stake_request").classList.remove('btn-ready');
 
-                alert("please connect to correct network.")
-                return;
-            } else {
-                const NFT = new web3.eth.Contract(ERC721.abi, this.state.token_info.token.token_contract_id);
-                NFT.methods.approve(network_util.get_erc721_transfer_proxy_address(this.state.token_info.token.chain_id), this.state.token_info.token.token_id).send({from : this.state.selectedAddress})
-                .on('error', () => this.callbackError('An error occured while approving token.'))
-                .then((res) => {console.log(res);
-                    document.getElementById("stake_approve").classList.add('btn-ready');
-                    document.getElementById("stake_request").classList.remove('btn-ready');
-
-                    this.hideLoading();
-                });
-            }
+            this.hideLoading();
         });
     }
 
     async handleStake() {
+        const { t } = this.props;
         if (!this.isElementEnabled("stake_request")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
-        this.showLoading();
+        if (!(await this.isCorrectNetwork())) return;
 
-        const web3 = new Web3(Web3.givenProvider);
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
+        this.showLoading();
 
         const Exchange = new web3.eth.Contract(EXCHANGE.abi, network_util.get_exchange(this.state.token_info.token.chain_id));
         Exchange.methods.stake(this.state.token_info.token.token_contract_id, this.state.token_info.token.token_id).send({from : this.state.selectedAddress})
-        .on('error', () => this.callbackError('An error occured while staking token.'))
+        .on('error', () => this.callbackError(t('An error occured while staking token.')))
         .then((res) => {console.log(res);
             API.stake_token(this.props.id)
             .then((res) => {
@@ -1287,358 +1389,395 @@ class Item extends React.Component {
     }
 
     async handleRevokeApprove() {
+        const { t } = this.props;
         if (!this.isElementEnabled("revoke_approve")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
-        const web3 = new Web3(Web3.givenProvider);
 
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
-                this.hideLoading();
+        const Caribmars = new web3.eth.Contract(CARIBMARS, network_util.get_caribmars(this.state.token_info.token.chain_id));
+        Caribmars.methods.approve(network_util.get_erc20_transfer_proxy(this.state.token_info.token.chain_id), config.StakingAmount).send({from : this.state.selectedAddress})
+        .on('error', () => this.callbackError(t('An error occured while approving token.')))
+        .then((res) => {console.log(res);
+            document.getElementById("revoke_approve").classList.add('btn-ready');
+            document.getElementById("revoke_request").classList.remove('btn-ready');
 
-                alert("please connect to correct network.")
-                return;
-            } else {
-                const Caribmars = new web3.eth.Contract(CARIBMARS, network_util.get_caribmars(this.state.token_info.token.chain_id));
-                Caribmars.methods.approve(network_util.get_erc20_transfer_proxy(this.state.token_info.token.chain_id), config.StakingAmount).send({from : this.state.selectedAddress})
-                .on('error', () => this.callbackError('An error occured while approving token.'))
-                .then((res) => {console.log(res);
-                    document.getElementById("revoke_approve").classList.add('btn-ready');
-                    document.getElementById("revoke_request").classList.remove('btn-ready');
-
-                    this.hideLoading();
-                });
-            }
+            this.hideLoading();
         });
     }
 
     async handleRevoke() {
+        const { t } = this.props;
         if (!this.isElementEnabled("revoke_request")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
 
-        const web3 = new Web3(Web3.givenProvider);
-
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
-                this.hideLoading();
-
-                alert("please connect to correct network.")
-                return;
-            } else {
-                const Exchange = new web3.eth.Contract(EXCHANGE.abi, network_util.get_exchange(this.state.token_info.token.chain_id));
-                Exchange.methods.clearStake(this.state.token_info.token.token_contract_id, this.state.token_info.token.token_id).send({from : this.state.selectedAddress})
-                .on('error', () => this.callbackError('An error occured while revoking token.'))
-                .then((res) => {console.log(res);
-                    API.revoke_token(this.props.id)
-                    .then((res) => {
-                        document.location.reload();
-                    })
-                });
-            }
+        const Exchange = new web3.eth.Contract(EXCHANGE.abi, network_util.get_exchange(this.state.token_info.token.chain_id));
+        Exchange.methods.clearStake(this.state.token_info.token.token_contract_id, this.state.token_info.token.token_id).send({from : this.state.selectedAddress})
+        .on('error', () => this.callbackError(t('An error occured while revoking token.')))
+        .then((res) => {console.log(res);
+            API.revoke_token(this.props.id)
+            .then((res) => {
+                document.location.reload();
+            })
         });
     }
 
     async handleFixedPriceFreeeze() {
+        const { t } = this.props;
         if (!this.isElementEnabled("remove_fixed_price_freeze")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
-        this.showLoading();
+        if (!(await this.isCorrectNetwork())) return;
 
-        const web3 = new Web3(Web3.givenProvider);
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
+        this.showLoading();
 
         const NFT = new web3.eth.Contract(ERC721.abi, this.state.token_info.token.token_contract_id);
         NFT.methods.freeApprove(this.state.token_info.token.token_id).send({from : this.state.selectedAddress})
-        .on('error', () => this.callbackError('An error occured while freezing token.'))
+        .on('error', () => this.callbackError(t('An error occured while freezing token.')))
         .then((res) => {console.log(res);
             document.location.reload();
         });
     }
 
     async handleERC1155FixedPriceFreeeze() {
+        const { t } = this.props;
         if (!this.isElementEnabled("remove_erc1155_fixed_price_freeze")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
-        this.showLoading();
+        if (!(await this.isCorrectNetwork())) return;
 
-        const web3 = new Web3(Web3.givenProvider);
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
+        this.showLoading();
 
         const NFT = new web3.eth.Contract(ERC1155, network_util.get_erc1155(this.state.token_info.token.chain_id));
         NFT.methods.freeze(this.state.token_info.token.token_id, this.state.token_info.token.owned_cnt, network_util.get_exchange_erc1155(this.state.token_info.token.chain_id)).send({from : this.state.selectedAddress})
-        .on('error', () => this.callbackError('An error occured while freezing token.'))
+        .on('error', () => this.callbackError(t('An error occured while freezing token.')))
         .then((res) => {console.log(res);
-            document.location = "/profile/" + this.state.selectedAddress;
+            window.location = config.host_url + "/profile/" + this.state.selectedAddress;
         });
     }
 
     async handleFixedPriceRemoveSale() {
+        const { t } = this.props;
         if (!this.isElementEnabled("remove_fixed_price_request")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
 
-        const web3 = new Web3(Web3.givenProvider);
+        const Exchange = new web3.eth.Contract(EXCHANGE.abi, network_util.get_exchange(this.state.token_info.token.chain_id));
+        Exchange.methods.CancelBuyRequest(this.state.token_info.token.token_contract_id, this.state.token_info.token.token_id).send({from : this.state.selectedAddress})
+        .on('error', () => this.callbackError(t('An error occured while removing sell.')))
+        .then((res) => {console.log(res);
+            API.remove_sale(this.props.id)
+            .then((res) => {
+                document.getElementById("remove_fixed_price_request").classList.add('btn-ready');
+                document.getElementById("remove_fixed_price_freeze").classList.remove('btn-ready');
 
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
                 this.hideLoading();
-
-                alert("please connect to correct network.")
-                return;
-            } else {
-                const Exchange = new web3.eth.Contract(EXCHANGE.abi, network_util.get_exchange(this.state.token_info.token.chain_id));
-                Exchange.methods.CancelBuyRequest(this.state.token_info.token.token_contract_id, this.state.token_info.token.token_id).send({from : this.state.selectedAddress})
-                .on('error', () => this.callbackError('An error occured while removing sale.'))
-                .then((res) => {console.log(res);
-                    API.remove_sale(this.props.id)
-                    .then((res) => {
-                        document.getElementById("remove_fixed_price_request").classList.add('btn-ready');
-                        document.getElementById("remove_fixed_price_freeze").classList.remove('btn-ready');
-
-                        this.hideLoading();
-                    })
-                });
-            }
+            })
         });
     }
 
     async handleERC1155FixedPriceRemoveSale() {
+        const { t } = this.props;
         if (!this.isElementEnabled("remove_fixed_price_request")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
 
-        const web3 = new Web3(Web3.givenProvider);
+        const Exchange = new web3.eth.Contract(EXCHANGEERC1155.abi, network_util.get_exchange_erc1155(this.state.token_info.token.chain_id));
+        Exchange.methods.CancelBuyERC1155Request(
+            this.state.token_info.token.token_id, 
+            this.state.token_info.token.owned_cnt,
+            Web3.utils.toWei(this.state.token_info.token.price + '', 'ether')
+        )
+        .send({from : this.state.selectedAddress})
+        .on('error', () => this.callbackError(t('An error occured while removing sell.')))
+        .then((res) => {console.log(res);
+            API.remove_erc1155_sale(this.props.id)
+            .then((res) => {
+                if (res.result) {
+                    document.getElementById("remove_erc1155_fixed_price_request").classList.add('btn-ready');
+                    document.getElementById("remove_erc1155_fixed_price_freeze").classList.remove('btn-ready');
 
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
-                this.hideLoading();
-
-                alert("please connect to correct network.")
-                return;
-            } else {
-                const Exchange = new web3.eth.Contract(EXCHANGEERC1155.abi, network_util.get_exchange_erc1155(this.state.token_info.token.chain_id));
-                Exchange.methods.CancelBuyERC1155Request(
-                    this.state.token_info.token.token_id, 
-                    this.state.token_info.token.owned_cnt,
-                    Web3.utils.toWei(this.state.token_info.token.price + '', 'ether')
-                )
-                .send({from : this.state.selectedAddress})
-                .on('error', () => this.callbackError('An error occured while removing sale.'))
-                .then((res) => {console.log(res);
-                    API.remove_erc1155_sale(this.props.id)
-                    .then((res) => {
-                        if (res.result) {
-                            document.getElementById("remove_erc1155_fixed_price_request").classList.add('btn-ready');
-                            document.getElementById("remove_erc1155_fixed_price_freeze").classList.remove('btn-ready');
-
-                            this.hideLoading();
-                        } else {
-                            this.callbackError('An error occured while removing sale.')
-                        }
-                    })
-                });
-            }
+                    this.hideLoading();
+                } else {
+                    this.callbackError(t('An error occured while removing sell.'));
+                }
+            })
         });
     }
 
     async handleAuctionFreeeze() {
+        const { t } = this.props;
         if (!this.isElementEnabled("remove_auction_freeze")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
-        
-        const web3 = new Web3(Web3.givenProvider);
 
         const NFT = new web3.eth.Contract(ERC721.abi, this.state.token_info.token.token_contract_id);
         NFT.methods.freeApprove(this.state.token_info.token.token_id).send({from : this.state.selectedAddress})
-        .on('error', () => this.callbackError('An error occured while sending token.'))
+        .on('error', () => this.callbackError(t('An error occured while sending token.')))
         .then((res) => {console.log(res);
             document.location.reload();
         });
     }
 
     async handleAuctionRemoveSale() {
+        const { t } = this.props;
         if (!this.isElementEnabled("remove_auction_request")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
 
-        const web3 = new Web3(Web3.givenProvider);
+        const Exchange = new web3.eth.Contract(EXCHANGE.abi, network_util.get_exchange(this.state.token_info.token.chain_id));
+        Exchange.methods.CancelAuctionRequests(this.state.token_info.token.token_contract_id, this.state.token_info.token.token_id, this.state.token_info.token.auction_asset_id).send({from : this.state.selectedAddress})
+        .on('error', () => this.callbackError(t('An error occured while removing sell.')))
+        .then((res) => {console.log(res);
+            API.remove_sale(this.props.id)
+            .then((res) => {
+                document.getElementById("remove_auction_request").classList.add('btn-ready');
+                document.getElementById("remove_auction_freeze").classList.remove('btn-ready');
 
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
                 this.hideLoading();
-
-                alert("please connect to correct network.")
-                return;
-            } else {
-                const Exchange = new web3.eth.Contract(EXCHANGE.abi, network_util.get_exchange(this.state.token_info.token.chain_id));
-                Exchange.methods.CancelAuctionRequests(this.state.token_info.token.token_contract_id, this.state.token_info.token.token_id, this.state.token_info.token.auction_asset_id).send({from : this.state.selectedAddress})
-                .on('error', () => this.callbackError('An error occured while removing sale.'))
-                .then((res) => {console.log(res);
-                    API.remove_sale(this.props.id)
-                    .then((res) => {
-                        document.getElementById("remove_auction_request").classList.add('btn-ready');
-                        document.getElementById("remove_auction_freeze").classList.remove('btn-ready');
-
-                        this.hideLoading();
-                    })
-                });
-            }
+            })
         });
     }
 
     async handleERC1155AuctionFreeeze() {
+        const { t } = this.props;
         if (!this.isElementEnabled("remove_erc1155_auction_freeze")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
-        
-        const web3 = new Web3(Web3.givenProvider);
 
         const NFT = new web3.eth.Contract(ERC1155, network_util.get_erc1155(this.state.token_info.token.chain_id));
         NFT.methods.freeze(this.state.token_info.token.token_id, this.state.token_info.token.owned_cnt, network_util.get_exchange_erc1155(this.state.token_info.token.chain_id)).send({from : this.state.selectedAddress})
-        .on('error', () => this.callbackError('An error occured while freezing token.'))
+        .on('error', () => this.callbackError(t('An error occured while freezing token.')))
         .then((res) => {console.log(res);
-            document.location = "/profile/" + this.state.selectedAddress;
+            window.location = config.host_url + "/profile/" + this.state.selectedAddress;
         });
     }
 
     async handleERC1155AuctionRemoveSale() {
+        const { t } = this.props;
         if (!this.isElementEnabled("remove_erc1155_auction_request")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
 
-        const web3 = new Web3(Web3.givenProvider);
+        const Exchange = new web3.eth.Contract(EXCHANGEERC1155.abi, network_util.get_exchange_erc1155(this.state.token_info.token.chain_id));
+        Exchange.methods.CancelAuctionERC1155Requests(this.state.token_info.token.token_id, this.state.token_info.token.owned_cnt, this.state.token_info.token.auction_asset_id).send({from : this.state.selectedAddress})
+        .on('error', () => this.callbackError(t('An error occured while removing sell.')))
+        .then((res) => {console.log(res);
+            API.remove_erc1155_sale(this.props.id)
+            .then((res) => {
+                if (res.result) {
+                    document.getElementById("remove_erc1155_auction_request").classList.add('btn-ready');
+                    document.getElementById("remove_erc1155_auction_freeze").classList.remove('btn-ready');
 
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
-                this.hideLoading();
-
-                alert("please connect to correct network.")
-                return;
-            } else {
-                const Exchange = new web3.eth.Contract(EXCHANGEERC1155.abi, network_util.get_exchange_erc1155(this.state.token_info.token.chain_id));
-                Exchange.methods.CancelAuctionERC1155Requests(this.state.token_info.token.token_id, this.state.token_info.token.owned_cnt, this.state.token_info.token.auction_asset_id).send({from : this.state.selectedAddress})
-                .on('error', () => this.callbackError('An error occured while removing sale.'))
-                .then((res) => {console.log(res);
-                    API.remove_erc1155_sale(this.props.id)
-                    .then((res) => {
-                        if (res.result) {
-                            document.getElementById("remove_erc1155_auction_request").classList.add('btn-ready');
-                            document.getElementById("remove_erc1155_auction_freeze").classList.remove('btn-ready');
-    
-                            this.hideLoading();
-                        } else {
-                            this.callbackError('An error occured while removing sale.')
-                        }
-                    })
-                });
-            }
+                    this.hideLoading();
+                } else {
+                    this.callbackError(t('An error occured while removing sell.'))
+                }
+            })
         });
     }
 
     async handleBurn() {
+        const { t } = this.props;
         if (!this.isElementEnabled("burn_token")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
 
-        const web3 = new Web3(Web3.givenProvider);
-
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
-                this.hideLoading();
-
-                alert("please connect to correct network.")
-                return;
-            } else {
-                const NFT = new web3.eth.Contract(ERC721.abi, this.state.token_info.token.token_contract_id);
-                NFT.methods.burn(this.state.token_info.token.token_id).send({from : this.state.selectedAddress})
-                .on('error', () => this.callbackError('An error occured while burning token.'))
-                .then((res) => {console.log(res);
-                    API.burn_token(this.props.id)
-                    .then((res) => {
-                        if (res.result) {
-                            window.location = "/profile/" + this.state.selectedAddress;
-                        } else {
-                            this.callbackError('An error occured while burning token.')
-                        }
-                    })
-                });
-            }
+        const NFT = new web3.eth.Contract(ERC721.abi, this.state.token_info.token.token_contract_id);
+        NFT.methods.burn(this.state.token_info.token.token_id).send({from : this.state.selectedAddress})
+        .on('error', () => this.callbackError(t('An error occured while burning token.')))
+        .then((res) => {console.log(res);
+            API.burn_token(this.props.id)
+            .then((res) => {
+                if (res.result) {
+                    window.location = config.host_url + "/profile/" + this.state.selectedAddress;
+                } else {
+                    this.callbackError(t('An error occured while burning token.'))
+                }
+            })
         });
     }
 
     async handleERC1155Burn() {
+        const { t } = this.props;
         if (!this.isElementEnabled("burn_erc1155_token")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!(await this.isCorrectNetwork())) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         this.showLoading();
 
-        const web3 = new Web3(Web3.givenProvider);
-
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.token_info.token.chain_id) {
-                this.hideLoading();
-
-                alert("please connect to correct network.")
-                return;
-            } else {
-                const NFT = new web3.eth.Contract(ERC1155, network_util.get_erc1155(this.state.token_info.token.chain_id));
-                NFT.methods.burn(this.state.selectedAddress, this.state.token_info.token.token_id, this.state.burn_amount).send({from : this.state.selectedAddress})
-                .on('error', () => this.callbackError('An error occured while burning token.'))
-                .then((res) => {console.log(res);
-                    API.burn_erc1155_token(this.props.id, this.state.burn_amount)
-                    .then((res) => {
-                        if (res.result) {
-                            window.location = "/profile/" + this.state.selectedAddress;
-                        } else {
-                            this.callbackError('An error occured while burning token.')
-                        }
-                    })
-                });
-            }
+        const NFT = new web3.eth.Contract(ERC1155, network_util.get_erc1155(this.state.token_info.token.chain_id));
+        NFT.methods.burn(this.state.selectedAddress, this.state.token_info.token.token_id, this.state.burn_amount).send({from : this.state.selectedAddress})
+        .on('error', () => this.callbackError(t('An error occured while burning token.')))
+        .then((res) => {console.log(res);
+            API.burn_erc1155_token(this.props.id, this.state.burn_amount)
+            .then((res) => {
+                if (res.result) {
+                    window.location = config.host_url + "/profile/" + this.state.selectedAddress;
+                } else {
+                    this.callbackError(t('An error occured while burning token.'))
+                }
+            })
         });
     }
 
@@ -1677,10 +1816,18 @@ class Item extends React.Component {
     }
 
     async isConnected() {
-        const web3 = new Web3(Web3.givenProvider);
+        const { t } = this.props;
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return false;
+        }
+
+        const web3 = new Web3(provider);
+
         var accounts = await web3.eth.getAccounts();
         if (accounts.length == 0) {
-            alert("Please connect the wallet");
+            alert(t("Please connect the wallet"));
             return false;
         }
         return true;
@@ -1832,6 +1979,39 @@ class Item extends React.Component {
         }
     }
 
+    isConnectedWallet() {
+        if (this.state.selectedAddress == null) {
+            alert('Please connect the wallet');
+            return false;
+        }
+
+        return true;
+    }
+
+    handleBtnPurchaseClicked() {
+        if (!this.isConnectedWallet()) return;
+
+        $('#popup-checkout-01').fadeIn(100);
+    }
+
+    handleBtnERC1155PurchaseClicked() {
+        if (!this.isConnectedWallet()) return;
+
+        $('#popup-erc1155-checkout-01').fadeIn(100);
+    }
+
+    handleBtnPlaceBidClicked() {
+        if (!this.isConnectedWallet()) return;
+
+        $('#popup-place-a-bid-02').fadeIn(100);
+    }
+
+    handleBtnERC1155PlaceBidClicked() {
+        if (!this.isConnectedWallet()) return;
+
+        $('#popup-erc1155-place-a-bid-02').fadeIn(100);
+    }
+
     render() {
         const { t } = this.props;
 
@@ -1851,10 +2031,12 @@ class Item extends React.Component {
                         style_bottom_pannel = style_hidden;
                     }
                 }
-            }
-
-            if (window.ethereum == undefined || window.ethereum.chainId != this.state.token_info.token.chain_id) {
-                style_bottom_pannel = style_hidden;
+            } else {
+                if (this.state.token_info.token.status == CONST.token_status.AUCTION || this.state.token_info.token.status == CONST.token_status.FIXED_PRICE) {
+                    style_bottom_pannel = {};
+                } else {
+                    style_bottom_pannel = style_hidden;
+                }
             }
         }
 
@@ -1912,15 +2094,21 @@ class Item extends React.Component {
                         <div className="item-inner">
                             <div className="item-mv">
                                 <div className="item-mv-wrapper">
-                                    <img src={this.state.token_info == null? mv: JSON.parse(this.state.token_info.token.metadata).url} alt="" />
+                                    { this.state.token_info != null && this.state.token_info.collection.id == 5 && JSON.parse(base64.decode(JSON.parse(this.state.token_info.token.metadata).description)).type == CONST.sns_type.TWITTER &&
+                                        <Tweet tweetId={JSON.parse(base64.decode(JSON.parse(this.state.token_info.token.metadata).description)).id}/>
+                                    }
+                                    { this.state.token_info != null && this.state.token_info.collection.id == 5 && JSON.parse(base64.decode(JSON.parse(this.state.token_info.token.metadata).description)).type == CONST.sns_type.YOUTUBE &&
+                                        <YouTube videoId={JSON.parse(base64.decode(JSON.parse(this.state.token_info.token.metadata).description)).id} opts={{width:'100%'}}/>
+                                    }
+                                    { this.state.token_info != null && this.state.token_info.collection.id != 5 &&
+                                        <img src={this.state.token_info == null? mv: JSON.parse(this.state.token_info.token.metadata).url} alt="" />
+                                    }
                                     <div className="item-mv-cat-list">
                                         <p className="item-mv-cat-item black">{this.state.token_info == null? "...": this.state.token_info.collection.name}</p>
                                         {/* <p className="item-mv-cat-item purple">UNLOCKABLE</p> */}
                                     </div>
                                     <div className="item-mv-actions" style={this.state.selectedAddress == null || this.state.profile == null || ls.get(CONST.local_storage_key.KEY_CONNECTED) == 0? style_hidden: {}}>
                                         {/* <a className="item-mv-actions-btn item-mv-actions-btn-close" href="#"><i className="fas fa-times"></i></a> */}
-                                        <a id="btn_sell" className="item-mv-actions-btn" href="#" style={this.state.token_info != null && this.state.selectedAddress == this.state.token_info.token.owner && this.state.token_info.token.status == CONST.token_status.NONE && this.state.token_info.token.type == CONST.protocol_type.ERC721? {}: style_hidden}><i className="fas fa-upload"></i></a>
-                                        <a id="btn_erc1155_sell" className="item-mv-actions-btn" href="#" style={this.state.token_info != null && this.state.selectedAddress == this.state.token_info.token.owner && this.state.token_info.token.status == CONST.token_status.NONE && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {}: style_hidden}><i className="fas fa-upload"></i></a>
                                         <a className="item-mv-actions-btn item-mv-actions-btn-like" onClick={() => this.handleLike()}><i className={this.state.is_like? "fas fa-heart": "far fa-heart"}></i></a>
                                         <a id="btn-show-item-popup" className="item-mv-actions-btn" href="#" style={this.state.token_info != null && this.state.selectedAddress == this.state.token_info.token.owner? {}: style_hidden}>
                                             <i className="fas fa-ellipsis-h"></i>
@@ -1928,43 +2116,27 @@ class Item extends React.Component {
                                                 <div className="item-popup-list">
                                                     <div id="btn_stake" className="item-popup-item" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.NONE && this.state.token_info.token.type == CONST.protocol_type.ERC721? {}: style_hidden}>
                                                         <div className="item-popup-item-icon"><i className="fas fa-dollar-sign"></i></div>
-                                                        <p className="item-popup-item-ttl">Stake token</p>
+                                                        <p className="item-popup-item-ttl">{t('Stake token')}</p>
                                                     </div>
                                                     <div id="btn_revoke" className="item-popup-item" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.STAKED && this.state.token_info.token.type == CONST.protocol_type.ERC721? {}: style_hidden}>
                                                         <div className="item-popup-item-icon"><i className="fas fa-dollar-sign"></i></div>
-                                                        <p className="item-popup-item-ttl">Revoke token</p>
+                                                        <p className="item-popup-item-ttl">{t('Revoke token')}</p>
                                                     </div>
                                                     <div id="btn_transfer" className="item-popup-item" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.NONE && this.state.token_info.token.type == CONST.protocol_type.ERC721? {}: style_hidden}>
                                                         <div className="item-popup-item-icon"><i className="fas fa-exchange-alt"></i></div>
-                                                        <p className="item-popup-item-ttl">Transfer token</p>
+                                                        <p className="item-popup-item-ttl">{t('Transfer token')}</p>
                                                     </div>
                                                     <div id="btn_erc1155_transfer" className="item-popup-item" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.NONE && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {}: style_hidden}>
                                                         <div className="item-popup-item-icon"><i className="fas fa-exchange-alt"></i></div>
-                                                        <p className="item-popup-item-ttl">Transfer token</p>
-                                                    </div>
-                                                    <div id="remove_fixed_price_sale" className="item-popup-item" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.FIXED_PRICE && this.state.token_info.token.type == CONST.protocol_type.ERC721? {marginBottom: '0px'}: style_hidden}>
-                                                        <div className="item-popup-item-icon"><i className="far fa-times-circle"></i></div>
-                                                        <p className="item-popup-item-ttl">Remove from sale</p>
-                                                    </div>
-                                                    <div id="remove_erc1155_fixed_price_sale" className="item-popup-item" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.FIXED_PRICE && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {marginBottom: '0px'}: style_hidden}>
-                                                        <div className="item-popup-item-icon"><i className="far fa-times-circle"></i></div>
-                                                        <p className="item-popup-item-ttl">Remove from sale</p>
-                                                    </div>
-                                                    <div id="remove_auction_sale" className="item-popup-item" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.token_info.token.type == CONST.protocol_type.ERC721? {}: style_hidden}>
-                                                        <div className="item-popup-item-icon"><i className="far fa-times-circle"></i></div>
-                                                        <p className="item-popup-item-ttl">Remove from sale</p>
-                                                    </div>
-                                                    <div id="remove_erc1155_auction_sale" className="item-popup-item" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {}: style_hidden}>
-                                                        <div className="item-popup-item-icon"><i className="far fa-times-circle"></i></div>
-                                                        <p className="item-popup-item-ttl">Remove from sale</p>
+                                                        <p className="item-popup-item-ttl">{t('Transfer token')}</p>
                                                     </div>
                                                     <div id="btn_burn" className="item-popup-item red" href="#" style={this.state.token_info != null && (this.state.token_info.token.status == CONST.token_status.NONE || this.state.token_info.token.status == CONST.token_status.STAKED) && this.state.token_info.token.type == CONST.protocol_type.ERC721? {}: style_hidden}>
                                                         <div className="item-popup-item-icon"><i className="fas fa-times-circle"></i></div>
-                                                        <p className="item-popup-item-ttl">Burn token</p>
+                                                        <p className="item-popup-item-ttl">{t('Burn token')}</p>
                                                     </div>
                                                     <div id="btn_burn_erc1155" className="item-popup-item red" href="#" style={this.state.token_info != null && (this.state.token_info.token.status == CONST.token_status.NONE || this.state.token_info.token.status == CONST.token_status.STAKED) && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {}: style_hidden}>
                                                         <div className="item-popup-item-icon"><i className="fas fa-times-circle"></i></div>
-                                                        <p className="item-popup-item-ttl">Burn token</p>
+                                                        <p className="item-popup-item-ttl">{t('Burn token')}</p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1985,7 +2157,16 @@ class Item extends React.Component {
                                         Smart Contract Address: {this.state.token_info == null? '...': this.state.token_info.token.token_contract_id}
                                     </div> */}
                                     <div className="item-infos-desc">
-                                        {this.state.token_info == null? "...": JSON.parse(this.state.token_info.token.metadata).description}
+                                        {this.state.token_info == null? "...": BASE64.decode(JSON.parse(this.state.token_info.token.metadata).description)}
+                                    </div>
+
+                                    <div className="item-infos-sell">
+                                        <a id="btn_sell" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.selectedAddress == this.state.token_info.token.owner && this.state.token_info.token.status == CONST.token_status.NONE && this.state.token_info.token.type == CONST.protocol_type.ERC721? {}: style_hidden}>{t('List for sell')}</a>
+                                        <a id="btn_erc1155_sell" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.selectedAddress == this.state.token_info.token.owner && this.state.token_info.token.status == CONST.token_status.NONE && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {}: style_hidden}>{t('List for sell')}</a>
+                                        <a id="remove_fixed_price_sale" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.FIXED_PRICE && this.state.token_info.token.type == CONST.protocol_type.ERC721? {marginBottom: '0px'}: style_hidden}>{t('Remove from sell')}</a>
+                                        <a id="remove_erc1155_fixed_price_sale" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.FIXED_PRICE && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {marginBottom: '0px'}: style_hidden}>{t('Remove from sell')}</a>
+                                        <a id="remove_auction_sale" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.token_info.token.type == CONST.protocol_type.ERC721? {}: style_hidden}>{t('Remove from sell')}</a>
+                                        <a id="remove_erc1155_auction_sale" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {}: style_hidden}>{t('Remove from sell')}</a>
                                     </div>
                                     
                                     <div className="item-infos-tags tags-list">
@@ -1996,7 +2177,7 @@ class Item extends React.Component {
                                     </div>
                                     <div className="item-infos-panel" style={this.state.selected_tab == CONST.item_selected_tab.INFO? {}: style_hidden}>
                                         <div className="iip-list">
-                                            <div className="iip-item" onClick={() => document.location = "/profile/" + this.state.token_info.owner.address}>
+                                            <div className="iip-item" onClick={() => window.location = config.host_url + "/profile/" + this.state.token_info.owner.address}>
                                                 <div className="iip-item-figure">
                                                     <img src={config.avatar_url + (this.state.token_info == null || this.state.token_info.owner.has_avatar == 0? "default": this.state.token_info.owner.address) + ".png"} onError={this.onAvatarError} alt="" />
                                                 </div>
@@ -2006,7 +2187,7 @@ class Item extends React.Component {
                                                 </div>
                                             </div>
 
-                                            <div className="iip-item" onClick={() => document.location = "/profile/" + this.state.token_info.deployer.address}>
+                                            <div className="iip-item" onClick={() => window.location = config.host_url + "/profile/" + this.state.token_info.deployer.address}>
                                                 <div className="iip-item-figure">
                                                     <img src={config.avatar_url + (this.state.token_info == null || this.state.token_info.deployer.has_avatar == 0? "default": this.state.token_info.deployer.address) + ".png"} onError={this.onAvatarError} alt="" />
                                                 </div>
@@ -2022,7 +2203,7 @@ class Item extends React.Component {
                                             {
                                             this.state.token_info != null && this.state.token_info.owners.map((item, index) => {
                                                 return (
-                                                    <div className="iip-item" onClick={() => document.location = "/profile/" + item.address}>
+                                                    <div className="iip-item" onClick={() => window.location = config.host_url + "/profile/" + item.address}>
                                                         <div className="iip-item-figure">
                                                             <img src={config.avatar_url + (item.has_avatar == 0? "default": item.address) + ".png"} onError={this.onAvatarError} alt="" />
                                                         </div>
@@ -2045,19 +2226,22 @@ class Item extends React.Component {
 
                                                 switch(item.tx_type) {
                                                     case CONST.tx_type.MINT:
-                                                        text = "Mint by " + item.name;
+                                                        text = t("Mint by", {name: item.name});
                                                         break;
                                                     case CONST.tx_type.TRANSFER:
-                                                        text = "Transfered by " + item.name;
+                                                        text = t("Transferred by", {name: item.name});
                                                         break;
                                                     case CONST.tx_type.BUY:
-                                                        text = "Sold by " + item.name;
+                                                        text = t("Sold by", {name: item.name});
                                                         break;
                                                     case CONST.tx_type.EXCHANGE:
-                                                        text = "Exchanged by " + item.name;
+                                                        text = t("Exchanged by", {name: item.name});
                                                         break;
                                                     case CONST.tx_type.STAKE:
-                                                        text = "Staked by " + item.name;
+                                                        text = t("Staked by simple", {name: item.name})
+                                                        break;
+                                                    case CONST.tx_type.REVOKE:
+                                                        text = t("Revoked by simple", {name: item.name})
                                                         break;
                                                     default:
                                                         text = "NONE";
@@ -2086,12 +2270,12 @@ class Item extends React.Component {
                                                 updated_at = updated_at.replace('T', ' ');
 
                                                 return (
-                                                    <div className="iip-item" onClick={() => document.location = "/profile/" + item.address}>
+                                                    <div className="iip-item" onClick={() => window.location = config.host_url + "/profile/" + item.address}>
                                                         <div className="iip-item-figure">
                                                             <img src={config.avatar_url + (item.has_avatar == 0? "default": item.address) + ".png"} onError={this.onAvatarError} alt="" />
                                                         </div>
                                                         <div className="iip-item-infos">
-                                                            <p className="iip-item-infos-ttl">{item.name} Bid with {item.amount} {AssetUtils.get_asset_by_id(item.asset_id)}</p>
+                                                            <p className="iip-item-infos-ttl">{t('Bid with', {name: item.name, amount: item.amount, asset: AssetUtils.get_asset_by_id(item.asset_id)})}</p>
                                                             <p className="iip-item-infos-name">{updated_at}</p>
                                                         </div>
                                                     </div>
@@ -2103,7 +2287,7 @@ class Item extends React.Component {
 
                                 <div className="item-infos-top">
                                     <div className="item-infos-tags tags-list ttl_copyright">
-                                        <p className="item-copyright">{t('Smart Contract Address')}({this.state.token_info == null? "Unknown": network_util.get_chain_name(this.state.token_info.token.chain_id)})</p>
+                                        <p className="item-copyright">{t('Smart Contract Address')}({this.state.token_info == null? t("Unknown"): network_util.get_chain_name(this.state.token_info.token.chain_id)})</p>
                                     </div>
                                     <div className="item-infos-panel">
                                         <div className="iip-list">
@@ -2127,15 +2311,15 @@ class Item extends React.Component {
                                         </div>
                                     </div>
 
-                                    <div className="iib-btn-groups" style={this.state.token_info == null || (this.state.selectedAddress == this.state.token_info.owner.address && this.state.token_info.token.status != CONST.token_status.AUCTION)? style_hidden: {}}>
-                                        <a id="btn-purchase-now" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.FIXED_PRICE && this.state.token_info.token.type == CONST.protocol_type.ERC721? {}: style_hidden}><span className="txt">Purchase now</span></a>
-                                        <a id="btn-erc1155-purchase-now" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.FIXED_PRICE && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {}: style_hidden}><span className="txt">Purchase now</span></a>
-                                        <a id="btn-place-a-bid" className="btn" href="#" style={this.state.token_info != null && this.state.selectedAddress != this.state.token_info.owner.address && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.is_already_bid == false && this.state.token_info.token.type == CONST.protocol_type.ERC721? {}: style_hidden}><span className="txt">Place a bid</span></a>
-                                        <a id="btn-erc1155-place-a-bid" className="btn" href="#" style={this.state.token_info != null && this.state.selectedAddress != this.state.token_info.owner.address && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.is_already_bid == false && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {}: style_hidden}><span className="txt">Place a bid</span></a>
-                                        <a id="btn-cancel-bid" className="btn" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.is_already_bid == true && this.state.token_info.token.type == CONST.protocol_type.ERC721? {}: style_hidden}><span className="txt">Cancel my bid</span></a>
-                                        <a id="btn-cancel-erc1155-bid" className="btn" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.is_already_bid == true && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {}: style_hidden}><span className="txt">Cancel my bid</span></a>
-                                        <a id="btn-accept-bid" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.token_info.owner.address == this.state.selectedAddress && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.token_info.bids.length > 0 && this.state.token_info.token.type == CONST.protocol_type.ERC721? {}: style_hidden}><span className="txt">Accept now</span></a>
-                                        <a id="btn-accept-erc1155-bid" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.token_info.owner.address == this.state.selectedAddress && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.token_info.bids.length > 0 && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {}: style_hidden}><span className="txt">Accept now</span></a>
+                                    <div className="iib-btn-groups" style={this.state.token_info != null && (this.state.token_info.token.status == CONST.token_status.FIXED_PRICE || this.state.token_info.token.status == CONST.token_status.AUCTION)? {}: style_hidden}>
+                                        <a id="btn-purchase-now" className="btn btn-blue" onClick={() => this.handleBtnPurchaseClicked()} style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.FIXED_PRICE && this.state.token_info.token.type == CONST.protocol_type.ERC721 && this.state.token_info.owner.address != this.state.selectedAddress? {}: style_hidden}><span className="txt">{t('Purchase now')}</span></a>
+                                        <a id="btn-erc1155-purchase-now" className="btn btn-blue" onClick={() => this.handleBtnERC1155PurchaseClicked()} style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.FIXED_PRICE && this.state.token_info.token.type == CONST.protocol_type.ERC1155 && this.state.token_info.owner.address != this.state.selectedAddress? {}: style_hidden}><span className="txt">{t('Purchase now')}</span></a>
+                                        <a id="btn-place-a-bid" className="btn" onClick={() => this.handleBtnPlaceBidClicked()} style={this.state.token_info != null && this.state.selectedAddress != this.state.token_info.owner.address && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.is_already_bid == false && this.state.token_info.token.type == CONST.protocol_type.ERC721? {}: style_hidden}><span className="txt">{t('Place a bid')}</span></a>
+                                        <a id="btn-erc1155-place-a-bid" className="btn" onClick={() => this.handleBtnERC1155PlaceBidClicked()} style={this.state.token_info != null && this.state.selectedAddress != this.state.token_info.owner.address && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.is_already_bid == false && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {}: style_hidden}><span className="txt">{t('Place a bid')}</span></a>
+                                        <a id="btn-cancel-bid" className="btn" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.is_already_bid == true && this.state.token_info.token.type == CONST.protocol_type.ERC721? {}: style_hidden}><span className="txt">{t('Cancel my bid')}</span></a>
+                                        <a id="btn-cancel-erc1155-bid" className="btn" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.is_already_bid == true && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {}: style_hidden}><span className="txt">{t('Cancel my bid')}</span></a>
+                                        <a id="btn-accept-bid" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.token_info.owner.address == this.state.selectedAddress && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.token_info.bids.length > 0 && this.state.token_info.token.type == CONST.protocol_type.ERC721? {}: style_hidden}><span className="txt">{t('Accept now')}</span></a>
+                                        <a id="btn-accept-erc1155-bid" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.token_info.owner.address == this.state.selectedAddress && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.token_info.bids.length > 0 && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {}: style_hidden}><span className="txt">{t('Accept now')}</span></a>
                                     </div>
 
                                     <div className="iib-tail">
@@ -2203,8 +2387,8 @@ class Item extends React.Component {
                             </div>
                         </div>
                         <div className="popup-body">
-                            <p className="popup-lead">You can transfer this nft token to the other person.</p>
-                            <input id="transfer_receiver" type="text" placeholder="e.g. Please input the receiver address." onChange={() => this.handleTransferAddress()}/>
+                            <p className="popup-lead">{t('You can transfer this nft token to the other person.')}</p>
+                            <input id="transfer_receiver" type="text" placeholder={"e.g. " + t('Please input the receiver address.')} onChange={() => this.handleTransferAddress()}/>
                             <table className="popup-table">
                                 <tbody>
                                     <tr>
@@ -2226,14 +2410,14 @@ class Item extends React.Component {
                                     <i className="fas fa-info-circle"></i>
                                 </div>
                                 <div className="popup-vn-infos">
-                                    <p className="popup-vn-infos-ttl">This receiver is not registered</p>
+                                    <p className="popup-vn-infos-ttl">{t('This receiver is not registered')}</p>
                                 </div>
                                 <div className="popup-vn-avatar">
                                 </div>
                             </div>
 
-                            <a id="popup-transfer-01-continue" className="btn btn-full btn-blue mb-8" href="#"><span className="txt">I understand, continue</span></a>
-                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">Cancel</span></a>
+                            <a id="popup-transfer-01-continue" className="btn btn-full btn-blue mb-8" href="#"><span className="txt">{t('I understand, continue')}</span></a>
+                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">{t('Cancel')}</span></a>
                         </div>
                     </div>
                 </div>
@@ -2241,7 +2425,7 @@ class Item extends React.Component {
                 <div id="popup-transfer-02" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Flow steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -2257,8 +2441,8 @@ class Item extends React.Component {
                                 </div>
                             </div>
 
-                            <a  id="popup-transfer-02-continue" className="btn btn-full btn-blue mb-8" onClick={() => this.handleTransfer()}><span className="txt">I understand, continue</span></a>
-                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">Cancel</span></a>
+                            <a  id="popup-transfer-02-continue" className="btn btn-full btn-blue mb-8" onClick={() => this.handleTransfer()}><span className="txt">{t('I understand, continue')}</span></a>
+                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">{t('Cancel')}</span></a>
                         </div>
                     </div>
                 </div>
@@ -2266,16 +2450,16 @@ class Item extends React.Component {
                 <div id="popup-erc1155-transfer-01" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Transfer</p>
+                            <p className="popup-head-ttl">{t('Transfer')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
                         </div>
                         <div className="popup-body">
-                            <p className="popup-lead">You can transfer this nft token to the other person.</p>
-                            <input id="transfer_erc1155_receiver" type="text" placeholder="e.g. Please input the receiver address." onChange={() => this.verifyERC1155Transfer()}/>
+                            <p className="popup-lead">{t('You can transfer this nft token to the other person.')}</p>
+                            <input id="transfer_erc1155_receiver" type="text" placeholder={"e.g. " + t('Please input the receiver address.')} onChange={() => this.verifyERC1155Transfer()}/>
                             <div className="amount-panel">
-                                <p>Amount</p>
+                                <p>{t('Amount')}</p>
                                 <input id="transfer_erc1155_amount" type="number" defaultValue="0" min="1" max={this.state.token_info == null? "1": this.state.token_info.token.owned_cnt} onChange={() => this.verifyERC1155Transfer()}/>
                             </div>
                             <table className="popup-table">
@@ -2299,15 +2483,15 @@ class Item extends React.Component {
                                     <i className="fas fa-info-circle"></i>
                                 </div>
                                 <div className="popup-vn-infos">
-                                    <p id="transfer-erc1155-receiver-not-correct" className="popup-vn-infos-ttl">This receiver is not registered</p>
-                                    <p id="transfer-erc1155-amount-not-correct" className="popup-vn-infos-ttl" style={{display: 'none'}}>Amount is not correct</p>
+                                    <p id="transfer-erc1155-receiver-not-correct" className="popup-vn-infos-ttl">{t('This receiver is not registered')}</p>
+                                    <p id="transfer-erc1155-amount-not-correct" className="popup-vn-infos-ttl" style={{display: 'none'}}>{t('Amount is not correct.')}</p>
                                 </div>
                                 <div className="popup-vn-avatar">
                                 </div>
                             </div>
 
-                            <a id="popup-transfer-erc1155-01-continue" className="btn btn-full btn-blue mb-8" href="#"><span className="txt">I understand, continue</span></a>
-                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">Cancel</span></a>
+                            <a id="popup-transfer-erc1155-01-continue" className="btn btn-full btn-blue mb-8" href="#"><span className="txt">{t('I understand, continue')}</span></a>
+                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">{t('Cancel')}</span></a>
                         </div>
                     </div>
                 </div>
@@ -2315,7 +2499,7 @@ class Item extends React.Component {
                 <div id="popup-erc1155-transfer-02" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Flow steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -2331,7 +2515,7 @@ class Item extends React.Component {
                                 </div>
                             </div>
 
-                            <a  id="popup-transfer-02-continue" className="btn btn-full btn-blue mb-8" onClick={() => this.handleERC1155Transfer()}><span className="txt">I understand, continue</span></a>
+                            <a  id="popup-transfer-02-continue" className="btn btn-full btn-blue mb-8" onClick={() => this.handleERC1155Transfer()}><span className="txt">{t('I understand, continue')}</span></a>
                             <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">{t('Cancel')}</span></a>
                         </div>
                     </div>
@@ -2340,7 +2524,7 @@ class Item extends React.Component {
                 <div id="popup-sale-01" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Sell the token</p>
+                            <p className="popup-head-ttl">{t('Sell the token')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -2351,11 +2535,11 @@ class Item extends React.Component {
                                 <thead>
                                     <tr>
                                         <th>
-                                            Price
+                                            {t('Price')}
                                         </th>
                                         <th align="right">
                                             <div align="right">
-                                                <input id="price" type="text" class="price" placeholder="0" autoComplete="off" onChange={() => this.handlePriceChange()}/>
+                                                <input id="price" type="text" className="price" placeholder="0" autoComplete="off" onChange={() => this.handlePriceChange()}/>
                                                 <div className="uic-main-item-field-select">
                                                     <select id="sale_asset" onChange={() => this.handleSaleAssetChanged()}>
                                                         {this.state.sell_type == CONST.token_status.FIXED_PRICE? 
@@ -2386,7 +2570,7 @@ class Item extends React.Component {
                                         <td>
                                             <div className="uic-main-item-field-check">
                                                 <input id="uic-chk-fixed-price" type="checkbox" onClick={() => this.handleSellType()}/>
-                                                <label for="uic-chk-fixed-price"></label>
+                                                <label htmlFor="uic-chk-fixed-price"></label>
                                             </div>
                                         </td>
                                     </tr>
@@ -2395,7 +2579,7 @@ class Item extends React.Component {
                                         <td>
                                             <div className="uic-main-item-field-check">
                                                 <input id="uic-chk-auction" type="checkbox" onClick={() => this.handleSellType()}/> 
-                                                <label for="uic-chk-auction"></label>
+                                                <label htmlFor="uic-chk-auction"></label>
                                             </div>
                                         </td>
                                     </tr>
@@ -2416,7 +2600,7 @@ class Item extends React.Component {
                                 </div>
                             </div>
 
-                            <a id="popup-sale-01-continue" className="btn btn-full btn-blue mb-8" href="#"><span className="txt">I understand, continue</span></a>
+                            <a id="popup-sale-01-continue" className="btn btn-full btn-blue mb-8" href="#"><span className="txt">{t('I understand, continue')}</span></a>
                             <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">{t('Cancel')}</span></a>
                         </div>
                     </div>
@@ -2425,7 +2609,7 @@ class Item extends React.Component {
                 <div id="popup-sale-02" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Follow steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -2435,22 +2619,22 @@ class Item extends React.Component {
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-arrow-up"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Approve</p>
-                                        <p className="popup-item-info-txt">Approve your nft token.</p>
+                                        <p className="popup-item-info-ttl">{t('Approve')}</p>
+                                        <p className="popup-item-info-txt">{t('Approve your nft token.')}</p>
                                     </div>
                                 </div>
-                                <a id="sell_approve" className="btn btn-full btn-blue" onClick={() => this.handleApprove()}><span className="txt">Start now</span></a>
+                                <a id="sell_approve" className="btn btn-full btn-blue" onClick={() => this.handleApprove()}><span className="txt">{t('Start now')}</span></a>
                             </div>
 
                             <div className="popup-item">
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-check"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Order</p>
-                                        <p className="popup-item-info-txt">Send sell order.</p>
+                                        <p className="popup-item-info-ttl">{t('Order')}</p>
+                                        <p className="popup-item-info-txt">{t('Send sell order.')}</p>
                                     </div>
                                 </div>
-                                <a id="sell_order" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleSellRequest()}><span className="txt">Start now</span></a>
+                                <a id="sell_order" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleSellRequest()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         </div>
                     </div>
@@ -2459,26 +2643,26 @@ class Item extends React.Component {
                 <div id="popup-erc1155-sale-01" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Sell the token</p>
+                            <p className="popup-head-ttl">{t('Sell the token')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
                         </div>
                         <div className="popup-body">
-                            <p className="popup-lead">You can sell this nft token with fixed price or auction.</p>
+                            <p className="popup-lead">{t('You can sell this nft token with fixed price or auction.')}</p>
                             <div className="amount-panel">
-                                <p>Amount</p>
+                                <p>{t('Amount')}</p>
                                 <input id="sale_erc1155_amount" type="number" defaultValue="0" min="1" max={this.state.token_info == null? "1": this.state.token_info.token.owned_cnt} onChange={() => this.verifyERC1155Sale()}/>
                             </div>
                             <table className="popup-table">
                                 <thead>
                                     <tr>
                                         <th>
-                                            Price
+                                            {t('Price')}
                                         </th>
                                         <th align="right">
                                             <div align="right">
-                                                <input id="sale_erc1155_price" type="text" class="price" placeholder="0" autoComplete="off" onChange={() => this.verifyERC1155Sale()}/>
+                                                <input id="sale_erc1155_price" type="text" className="price" placeholder="0" autoComplete="off" onChange={() => this.verifyERC1155Sale()}/>
                                                 <div className="uic-main-item-field-select">
                                                     <select id="erc1155_sale_asset" onChange={() => this.handleERC1155SaleAssetChanged()}>
                                                     {this.state.sell_type == CONST.token_status.FIXED_PRICE? 
@@ -2497,28 +2681,28 @@ class Item extends React.Component {
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td>Your balance</td>
+                                        <td>{t('Your balance')}</td>
                                         <td>{BalanceUtil.format_balance(this.state.balance, this.state.selected_asset)}</td>
                                     </tr>
                                     <tr>
-                                        <td>Service fee</td>
+                                        <td>{t('Service fee')}</td>
                                         <td>{BalanceUtil.format_balance(this.state.show_sell_notice? 0: config.service_fee * this.state.sell_price / 100, this.state.selected_asset)}</td>
                                     </tr>
                                     <tr>
-                                        <td>Fixed Price</td>
+                                        <td>{t('Fixed Price')}</td>
                                         <td>
                                             <div className="uic-main-item-field-check">
                                                 <input id="uic-chk-erc1155-fixed-price" type="checkbox" defaultChecked="true" onClick={() => this.handleERC1155SellType()}/>
-                                                <label for="uic-chk-erc1155-fixed-price"></label>
+                                                <label htmlFor="uic-chk-erc1155-fixed-price"></label>
                                             </div>
                                         </td>
                                     </tr>
                                     <tr>
-                                        <td>Auction</td>
+                                        <td>{t('Auction')}</td>
                                         <td>
                                             <div className="uic-main-item-field-check">
                                                 <input id="uic-chk-erc1155-auction" type="checkbox" onClick={() => this.handleERC1155SellType()}/> 
-                                                <label for="uic-chk-erc1155-auction"></label>
+                                                <label htmlFor="uic-chk-erc1155-auction"></label>
                                             </div>
                                         </td>
                                     </tr>
@@ -2533,15 +2717,15 @@ class Item extends React.Component {
                                     <i className="fas fa-info-circle"></i>
                                 </div>
                                 <div className="popup-vn-infos">
-                                    <p id="sale_erc1155_amount_not_correct" className="popup-vn-infos-ttl">Amount is not correct.</p>
-                                    <p id="sale_erc1155_price_not_correct" className="popup-vn-infos-ttl">Price is not correct.</p>
+                                    <p id="sale_erc1155_amount_not_correct" className="popup-vn-infos-ttl">{t('Amount is not correct.')}</p>
+                                    <p id="sale_erc1155_price_not_correct" className="popup-vn-infos-ttl">{t('Price is not correct.')}</p>
                                 </div>
                                 <div className="popup-vn-avatar">
                                 </div>
                             </div>
 
-                            <a id="popup-sale-erc1155-01-continue" className="btn btn-full btn-blue mb-8" href="#"><span className="txt">I understand, continue</span></a>
-                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">Cancel</span></a>
+                            <a id="popup-sale-erc1155-01-continue" className="btn btn-full btn-blue mb-8" href="#"><span className="txt">{t('I understand, continue')}</span></a>
+                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">{t('Cancel')}</span></a>
                         </div>
                     </div>
                 </div>
@@ -2549,7 +2733,7 @@ class Item extends React.Component {
                 <div id="popup-erc1155-sale-02" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Follow steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -2559,22 +2743,22 @@ class Item extends React.Component {
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-arrow-up"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Approve</p>
-                                        <p className="popup-item-info-txt">Approve your nft token.</p>
+                                        <p className="popup-item-info-ttl">{t('Approve')}</p>
+                                        <p className="popup-item-info-txt">{t('Approve your nft token.')}</p>
                                     </div>
                                 </div>
-                                <a id="erc1155_sell_approve" className="btn btn-full btn-blue" onClick={() => this.handleERC1155Approve()}><span className="txt">Start now</span></a>
+                                <a id="erc1155_sell_approve" className="btn btn-full btn-blue" onClick={() => this.handleERC1155Approve()}><span className="txt">{t('Start now')}</span></a>
                             </div>
 
                             <div className="popup-item">
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-check"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Order</p>
-                                        <p className="popup-item-info-txt">Send sell order.</p>
+                                        <p className="popup-item-info-ttl">{t('Order')}</p>
+                                        <p className="popup-item-info-txt">{t('Send sell order.')}</p>
                                     </div>
                                 </div>
-                                <a id="erc1155_sell_order" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleERC1155SellRequest()}><span className="txt">Start now</span></a>
+                                <a id="erc1155_sell_order" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleERC1155SellRequest()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         </div>
                     </div>
@@ -2583,13 +2767,13 @@ class Item extends React.Component {
                 <div id="popup-checkout-01" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Checkout</p>
+                            <p className="popup-head-ttl">{t('Checkout')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
                         </div>
                         <div className="popup-body">
-                            <p className="popup-lead">You can about to purchase COINZ from UI8</p>
+                            <p className="popup-lead">{t('You are about to purchase the NFT Token.')}</p>
                             <table className="popup-table">
                                 <thead>
                                     <tr>
@@ -2599,11 +2783,11 @@ class Item extends React.Component {
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td>Your balance</td>
+                                        <td>{t('Your balance')}</td>
                                         <td>{BalanceUtil.format_balance(this.state.balance, this.state.token_info != null && this.state.token_info.token.chain_id == support_networks.ETHEREUM? "ETH": 'BNB')}</td>
                                     </tr>
                                     <tr>
-                                        <td>Service fee</td>
+                                        <td>{t('Service fee')}</td>
                                         <td>{BalanceUtil.format_balance(this.state.token_info == null? 0: config.service_fee * this.state.token_info.token.price / 100, this.state.token_info != null && this.state.token_info.token.chain_id == support_networks.ETHEREUM? "ETH": 'BNB')}</td>
                                     </tr>
                                     {/* <tr>
@@ -2624,8 +2808,8 @@ class Item extends React.Component {
                                 </div>
                             </div> */}
 
-                            <a id="popup-purchase-01" className="btn btn-full btn-blue mb-8" onClick={() => this.handlePurchase()}><span className="txt">I understand, Purchase</span></a>
-                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">Cancel</span></a>
+                            <a id="popup-purchase-01" className="btn btn-full btn-blue mb-8" onClick={() => this.handlePurchase()}><span className="txt">{t('I understand, Purchase')}</span></a>
+                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">{t('Cancel')}</span></a>
                         </div>
                     </div>
                 </div>
@@ -2633,7 +2817,7 @@ class Item extends React.Component {
                 <div id="popup-checkout-02" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Flow steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -2643,8 +2827,8 @@ class Item extends React.Component {
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-spinner"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Purchasing</p>
-                                        <p className="popup-item-info-txt">Sending transaction with your wallet</p>
+                                        <p className="popup-item-info-ttl">{t('Purchasing')}</p>
+                                        <p className="popup-item-info-txt">{t('Sending transaction with your wallet')}</p>
                                     </div>
                                 </div>
                             </div>
@@ -2654,16 +2838,16 @@ class Item extends React.Component {
                                     <i className="fas fa-info-circle"></i>
                                 </div>
                                 <div className="popup-vn-infos">
-                                    <p className="popup-vn-infos-ttl">This creator is not verified</p>
-                                    <p className="popup-vn-infos-txt">Purchase this item at your own risk</p>
+                                    <p className="popup-vn-infos-ttl">{t('This creator is not verified')}</p>
+                                    <p className="popup-vn-infos-txt">{t('Purchase this item at your own risk')}</p>
                                 </div>
                                 <div className="popup-vn-avatar">
                                     <img src={icon_avatar_01} alt="" />
                                 </div>
                             </div>
 
-                            <a  id="popup-purchase-02" className="btn btn-full btn-blue mb-8" href="#"><span className="txt">I understand, continue</span></a>
-                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">Cancel</span></a>
+                            <a  id="popup-purchase-02" className="btn btn-full btn-blue mb-8" href="#"><span className="txt">{t('I understand, continue')}</span></a>
+                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">{t('Cancel')}</span></a>
                         </div>
                     </div>
                 </div>
@@ -2672,7 +2856,7 @@ class Item extends React.Component {
                     <div className="popup-box">
                         <div className="popup-head">
                             <p className="popup-head-ttl"></p>
-                            <div id="congratulation-popup-close" className="icon icon-40 popup-close-1" onClick={() => document.location = "/profile/" + this.state.selectedAddress}>
+                            <div id="congratulation-popup-close" className="icon icon-40 popup-close-1" onClick={() => window.location = config.host_url + "/profile/" + this.state.selectedAddress}>
                                 <i className="fas fa-times"></i>
                             </div>
                         </div>
@@ -2682,17 +2866,17 @@ class Item extends React.Component {
                             </p>
 
                             <p className="popup-lead center">
-                                You successfully purchased<br/>
+                                {t('You successfully purchased')}<br/>
                                 {/* <span>COINZ</span> from UI8 */}
                             </p>
 
                             <div className="popup-complete-box">
                                 <div className="popup-complete-box-row">
-                                    <p>Status</p>
-                                    <p>Transaction ID</p>
+                                    <p>{t('Status')}</p>
+                                    <p>{t('Transaction ID')}</p>
                                 </div>
                                 <div className="popup-complete-box-row">
-                                    <p className="blue">Completed</p>
+                                    <p className="blue">{t('Completed')}</p>
                                     <p className="black">{this.state.buy_tx_id.slice(0, 12) + "..." + this.state.buy_tx_id.slice(57, this.state.buy_tx_id.length)}</p>
                                 </div>
                             </div>
@@ -2712,13 +2896,13 @@ class Item extends React.Component {
                 <div id="popup-erc1155-checkout-01" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Checkout</p>
+                            <p className="popup-head-ttl">{t('Checkout')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
                         </div>
                         <div className="popup-body">
-                            <p className="popup-lead">You can about to purchase COINZ from UI8</p>
+                            <p className="popup-lead">{t('You are about to purchase the NFT Token.')}</p>
                             <table className="popup-table">
                                 <thead>
                                     <tr>
@@ -2728,11 +2912,11 @@ class Item extends React.Component {
                                 </thead>
                                 <tbody>
                                 <tr>
-                                        <td>Your balance</td>
+                                        <td>{t('Your balance')}</td>
                                         <td>{BalanceUtil.format_balance(this.state.balance, this.state.token_info != null && this.state.token_info.token.chain_id == support_networks.ETHEREUM? "ETH": 'BNB')}</td>
                                     </tr>
                                     <tr>
-                                        <td>Service fee</td>
+                                        <td>{t('Service fee')}</td>
                                         <td>{BalanceUtil.format_balance(this.state.token_info == null? 0: config.service_fee * this.state.token_info.token.price / 100, this.state.token_info != null && this.state.token_info.token.chain_id == support_networks.ETHEREUM? "ETH": 'BNB')}</td>
                                     </tr>
                                     {/* <tr>
@@ -2753,8 +2937,8 @@ class Item extends React.Component {
                                 </div>
                             </div> */}
 
-                            <a id="popup-erc1155-purchase-01" className="btn btn-full btn-blue mb-8" onClick={() => this.handleERC1155Purchase()}><span className="txt">I understand, Purchase</span></a>
-                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">Cancel</span></a>
+                            <a id="popup-erc1155-purchase-01" className="btn btn-full btn-blue mb-8" onClick={() => this.handleERC1155Purchase()}><span className="txt">{t('I understand, Purchase')}</span></a>
+                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">{t('Cancel')}</span></a>
                         </div>
                     </div>
                 </div>
@@ -2772,10 +2956,10 @@ class Item extends React.Component {
                                 <div className="popup-wallet-mark-icon"><i className="fas fa-wallet"></i></div>
                             </div>
                             <p className="popup-lead center">
-                                You need to connect your wallet first to sign message and send transaction to Ethereum network
+                                {t('You need to connect your wallet first to sign message and send transaction to Ethereum network')}
                             </p>
-                            <a id="btn-show-place-a-bid-01" className="btn btn-full btn-blue mb-8" href="#"><span className="txt">Connect wallet</span></a>
-                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">Cancel</span></a>
+                            <a id="btn-show-place-a-bid-01" className="btn btn-full btn-blue mb-8" href="#"><span className="txt">{t('Connect wallet')}</span></a>
+                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">{t('Cancel')}</span></a>
                         </div>
                     </div>
                 </div>
@@ -2783,31 +2967,31 @@ class Item extends React.Component {
                 <div id="popup-place-a-bid-02" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Place a bid</p>
+                            <p className="popup-head-ttl">{t('Place a bid')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
                         </div>
                         <div className="popup-body">
-                            <p className="popup-lead">You are about to place a bid</p>
+                            <p className="popup-lead">{t('You are about to place a bid')}</p>
 
-                            <p className="popup-table-ttl">Your bid</p>
+                            <p className="popup-table-ttl">{t('Your bid')}</p>
                             <table className="popup-table">
                                 <thead>
                                     <tr>
                                         <th>
-                                            <input id="bid_price" type="text" class="price_left" placeholder="Enter bid" autocomplete="off" style={{textAlign: 'left'}} onChange={() => this.handleBidAmountChanged()}/>
+                                            <input id="bid_price" type="text" className="price_left" placeholder={t("Enter bid")} autoComplete="off" style={{textAlign: 'left'}} onChange={() => this.handleBidAmountChanged()}/>
                                         </th>
                                         <th>{this.state.token_info != null? AssetUtils.get_asset_by_id(this.state.token_info.token.auction_asset_id): 'BNB'}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td>Your balance</td>
+                                        <td>{t('Your balance')}</td>
                                         <td>{BalanceUtil.format_balance(this.state.bid_asset_balance, this.state.bid_asset_name)}</td>
                                     </tr>
                                     <tr>
-                                        <td>Service fee</td>
+                                        <td>{t('Service fee')}</td>
                                         <td>{BalanceUtil.format_balance(this.state.show_bid_notice? 0: config.service_fee * this.state.bid_amount / 100, this.state.bid_asset_name)}</td>
                                     </tr>
                                     {/* <tr>
@@ -2822,14 +3006,14 @@ class Item extends React.Component {
                                     <i className="fas fa-info-circle"></i>
                                 </div>
                                 <div className="popup-vn-infos">
-                                    <p className="popup-vn-infos-ttl">The bid amount is incorrect</p>
+                                    <p className="popup-vn-infos-ttl">{t('The bid amount is incorrect.')}</p>
                                 </div>
                                 <div className="popup-vn-avatar">
                                 </div>
                             </div>
 
-                            <a id="btn-show-place-a-bid-02" className="btn btn-full btn-blue mb-8" href="#"><span className="txt">Place a bid</span></a>
-                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">Cancel</span></a>
+                            <a id="btn-show-place-a-bid-02" className="btn btn-full btn-blue mb-8" href="#"><span className="txt">{t('Place a bid')}</span></a>
+                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">{t('Cancel')}</span></a>
                         </div>
                     </div>
                 </div>
@@ -2837,7 +3021,7 @@ class Item extends React.Component {
                 <div id="popup-place-a-bid-03" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Follow steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -2847,22 +3031,22 @@ class Item extends React.Component {
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-arrow-up"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Approve</p>
-                                        <p className="popup-item-info-txt">Approve your tokens for bid</p>
+                                        <p className="popup-item-info-ttl">{t('Approve')}</p>
+                                        <p className="popup-item-info-txt">{t('Approve your tokens for bid')}</p>
                                     </div>
                                 </div>
-                                <a id="bid_approve" className="btn btn-full btn-blue" onClick={() => this.handleBidApprove()}><span className="txt">Start now</span></a>
+                                <a id="bid_approve" className="btn btn-full btn-blue" onClick={() => this.handleBidApprove()}><span className="txt">{t('Start now')}</span></a>
                             </div>
 
                             <div className="popup-item">
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-check"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Bid</p>
-                                        <p className="popup-item-info-txt">Bid your request</p>
+                                        <p className="popup-item-info-ttl">{t('Bid')}</p>
+                                        <p className="popup-item-info-txt">{t('Bid your request')}</p>
                                     </div>
                                 </div>
-                                <a id="bid_request" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleBidRequest()}><span className="txt">Start now</span></a>
+                                <a id="bid_request" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleBidRequest()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         </div>
                     </div>
@@ -2871,31 +3055,31 @@ class Item extends React.Component {
                 <div id="popup-erc1155-place-a-bid-02" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Place a bid</p>
+                            <p className="popup-head-ttl">{t('Place a bid')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
                         </div>
                         <div className="popup-body">
-                            <p className="popup-lead">You are about to place a bid</p>
+                            <p className="popup-lead">{t('You are about to place a bid')}</p>
 
-                            <p className="popup-table-ttl">Your bid</p>
+                            <p className="popup-table-ttl">{t('Your bid')}</p>
                             <table className="popup-table">
                                 <thead>
                                     <tr>
                                         <th>
-                                            <input id="erc1155_bid_price" type="text" class="price_left" placeholder="Enter bid" autocomplete="off" style={{textAlign: 'left'}} onChange={() => this.handleERC1155BidAmountChanged()}/>
+                                            <input id="erc1155_bid_price" type="text" className="price_left" placeholder={t("Enter bid")} autoComplete="off" style={{textAlign: 'left'}} onChange={() => this.handleERC1155BidAmountChanged()}/>
                                         </th>
                                         <th>{this.state.token_info != null? AssetUtils.get_asset_by_id(this.state.token_info.token.auction_asset_id): 'BNB'}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td>Your balance</td>
+                                        <td>{t('Your balance')}</td>
                                         <td>{BalanceUtil.format_balance(this.state.bid_asset_balance, this.state.bid_asset_name)}</td>
                                     </tr>
                                     <tr>
-                                        <td>Service fee</td>
+                                        <td>{t('Service fee')}</td>
                                         <td>{BalanceUtil.format_balance(this.state.show_bid_notice? 0: config.service_fee * this.state.bid_amount / 100, this.state.bid_asset_name)}</td>
                                     </tr>
                                     {/* <tr>
@@ -2910,14 +3094,14 @@ class Item extends React.Component {
                                     <i className="fas fa-info-circle"></i>
                                 </div>
                                 <div className="popup-vn-infos">
-                                    <p className="popup-vn-infos-ttl">The bid amount is incorrect</p>
+                                    <p className="popup-vn-infos-ttl">{t('The bid amount is incorrect.')}</p>
                                 </div>
                                 <div className="popup-vn-avatar">
                                 </div>
                             </div>
 
-                            <a id="btn-show-erc1155-place-a-bid-02" className="btn btn-full btn-blue mb-8" href="#"><span className="txt">Place a bid</span></a>
-                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">Cancel</span></a>
+                            <a id="btn-show-erc1155-place-a-bid-02" className="btn btn-full btn-blue mb-8" href="#"><span className="txt">{t('Place a bid')}</span></a>
+                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">{t('Cancel')}</span></a>
                         </div>
                     </div>
                 </div>
@@ -2925,7 +3109,7 @@ class Item extends React.Component {
                 <div id="popup-erc1155-place-a-bid-03" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Follow steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -2935,22 +3119,22 @@ class Item extends React.Component {
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-arrow-up"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Approve</p>
-                                        <p className="popup-item-info-txt">Approve your tokens for bid</p>
+                                        <p className="popup-item-info-ttl">{t('Approve')}</p>
+                                        <p className="popup-item-info-txt">{t('Approve your tokens for bid')}</p>
                                     </div>
                                 </div>
-                                <a id="erc1155_bid_approve" className="btn btn-full btn-blue" onClick={() => this.handleERC1155BidApprove()}><span className="txt">Start now</span></a>
+                                <a id="erc1155_bid_approve" className="btn btn-full btn-blue" onClick={() => this.handleERC1155BidApprove()}><span className="txt">{t('Start now')}</span></a>
                             </div>
 
                             <div className="popup-item">
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-check"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Bid</p>
-                                        <p className="popup-item-info-txt">Bid your request</p>
+                                        <p className="popup-item-info-ttl">{t('Bid')}</p>
+                                        <p className="popup-item-info-txt">{t('Bid your request')}</p>
                                     </div>
                                 </div>
-                                <a id="erc1155_bid_request" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleERC1155BidRequest()}><span className="txt">Start now</span></a>
+                                <a id="erc1155_bid_request" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleERC1155BidRequest()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         </div>
                     </div>
@@ -2959,7 +3143,7 @@ class Item extends React.Component {
                 <div id="popup-cancel-bid-01" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Follow steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -2969,11 +3153,11 @@ class Item extends React.Component {
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-arrow-up"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Cancel</p>
-                                        <p className="popup-item-info-txt">Cancel your bid</p>
+                                        <p className="popup-item-info-ttl">{t('Cancel')}</p>
+                                        <p className="popup-item-info-txt">{t('Cancel your bid')}</p>
                                     </div>
                                 </div>
-                                <a id="bid_cancel_approve" className="btn btn-full btn-blue" onClick={() => this.handleBidCancel()}><span className="txt">Start now</span></a>
+                                <a id="bid_cancel_approve" className="btn btn-full btn-blue" onClick={() => this.handleBidCancel()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         </div>
                     </div>
@@ -2982,7 +3166,7 @@ class Item extends React.Component {
                 <div id="popup-cancel-erc1155-bid-01" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Follow steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -2992,11 +3176,11 @@ class Item extends React.Component {
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-arrow-up"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Cancel</p>
-                                        <p className="popup-item-info-txt">Cancel your bid</p>
+                                        <p className="popup-item-info-ttl">{t('Cancel')}</p>
+                                        <p className="popup-item-info-txt">{t('Cancel your bid')}</p>
                                     </div>
                                 </div>
-                                <a id="erc1155_bid_cancel_approve" className="btn btn-full btn-blue" onClick={() => this.handleERC1155BidCancel()}><span className="txt">Start now</span></a>
+                                <a id="erc1155_bid_cancel_approve" className="btn btn-full btn-blue" onClick={() => this.handleERC1155BidCancel()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         </div>
                     </div>
@@ -3005,7 +3189,7 @@ class Item extends React.Component {
                 <div id="popup-accept-bid-01" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Follow steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -3015,11 +3199,11 @@ class Item extends React.Component {
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-arrow-up"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Accept</p>
-                                        <p className="popup-item-info-txt">Accept the highest bid</p>
+                                        <p className="popup-item-info-ttl">{t('Accept')}</p>
+                                        <p className="popup-item-info-txt">{t('Accept the highest bid')}</p>
                                     </div>
                                 </div>
-                                <a id="bid_accept_approve" className="btn btn-full btn-blue" onClick={() => this.handleBidAccept()}><span className="txt">Start now</span></a>
+                                <a id="bid_accept_approve" className="btn btn-full btn-blue" onClick={() => this.handleBidAccept()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         </div>
                     </div>
@@ -3028,7 +3212,7 @@ class Item extends React.Component {
                 <div id="popup-accept-erc1155-bid-01" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Follow steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -3038,11 +3222,11 @@ class Item extends React.Component {
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-arrow-up"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Accept</p>
-                                        <p className="popup-item-info-txt">Accept the highest bid</p>
+                                        <p className="popup-item-info-ttl">{t('Accept')}</p>
+                                        <p className="popup-item-info-txt">{t('Accept the highest bid')}</p>
                                     </div>
                                 </div>
-                                <a id="erc1155_bid_accept_approve" className="btn btn-full btn-blue" onClick={() => this.handleERC1155BidAccept()}><span className="txt">Start now</span></a>
+                                <a id="erc1155_bid_accept_approve" className="btn btn-full btn-blue" onClick={() => this.handleERC1155BidAccept()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         </div>
                     </div>
@@ -3051,7 +3235,7 @@ class Item extends React.Component {
                 <div id="popup-stake-01" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Follow steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -3061,22 +3245,22 @@ class Item extends React.Component {
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-arrow-up"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Approve</p>
-                                        <p className="popup-item-info-txt">Approve your tokens for stake</p>
+                                        <p className="popup-item-info-ttl">{t('Approve')}</p>
+                                        <p className="popup-item-info-txt">{t('Approve your tokens for stake')}</p>
                                     </div>
                                 </div>
-                                <a id="stake_approve" className="btn btn-full btn-blue" onClick={() => this.handleStakeApprove()}><span className="txt">Start now</span></a>
+                                <a id="stake_approve" className="btn btn-full btn-blue" onClick={() => this.handleStakeApprove()}><span className="txt">{t('Start now')}</span></a>
                             </div>
 
                             <div className="popup-item">
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-check"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Stake</p>
-                                        <p className="popup-item-info-txt">Stake your token</p>
+                                        <p className="popup-item-info-ttl">{t('Stake')}</p>
+                                        <p className="popup-item-info-txt">{t("Stake your token")}</p>
                                     </div>
                                 </div>
-                                <a id="stake_request" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleStake()}><span className="txt">Start now</span></a>
+                                <a id="stake_request" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleStake()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         </div>
                     </div>
@@ -3085,7 +3269,7 @@ class Item extends React.Component {
                 <div id="popup-revoke-01" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Follow steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -3095,22 +3279,22 @@ class Item extends React.Component {
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-arrow-up"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Approve</p>
-                                        <p className="popup-item-info-txt">Approve your tokens for revoke</p>
+                                        <p className="popup-item-info-ttl">{t('Approve')}</p>
+                                        <p className="popup-item-info-txt">{t('Approve your tokens for revoke')}</p>
                                     </div>
                                 </div>
-                                <a id="revoke_approve" className="btn btn-full btn-blue" onClick={() => this.handleRevokeApprove()}><span className="txt">Start now</span></a>
+                                <a id="revoke_approve" className="btn btn-full btn-blue" onClick={() => this.handleRevokeApprove()}><span className="txt">{t('Start now')}</span></a>
                             </div>
 
                             <div className="popup-item">
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-arrow-up"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Revoke</p>
-                                        <p className="popup-item-info-txt">Revoke your staked token</p>
+                                        <p className="popup-item-info-ttl">{t('Revoke')}</p>
+                                        <p className="popup-item-info-txt">{t('Revoke your staked token')}</p>
                                     </div>
                                 </div>
-                                <a id="revoke_request" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleRevoke()}><span className="txt">Start now</span></a>
+                                <a id="revoke_request" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleRevoke()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         </div>
                     </div>
@@ -3119,7 +3303,7 @@ class Item extends React.Component {
                 <div id="popup-remove-fixed-price-01" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Follow steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -3129,22 +3313,22 @@ class Item extends React.Component {
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-check"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Remove</p>
-                                        <p className="popup-item-info-txt">Remove from sale</p>
+                                        <p className="popup-item-info-ttl">{t('Remove')}</p>
+                                        <p className="popup-item-info-txt">{t('Remove from sell')}</p>
                                     </div>
                                 </div>
-                                <a id="remove_fixed_price_request" className="btn btn-full btn-blue" onClick={() => this.handleFixedPriceRemoveSale()}><span className="txt">Start now</span></a>
+                                <a id="remove_fixed_price_request" className="btn btn-full btn-blue" onClick={() => this.handleFixedPriceRemoveSale()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         
                             <div className="popup-item">
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-arrow-up"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Freeze</p>
-                                        <p className="popup-item-info-txt">Freeze your nft token</p>
+                                        <p className="popup-item-info-ttl">{t('Freeze')}</p>
+                                        <p className="popup-item-info-txt">{t('Freeze your nft token')}</p>
                                     </div>
                                 </div>
-                                <a id="remove_fixed_price_freeze" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleFixedPriceFreeeze()}><span className="txt">Start now</span></a>
+                                <a id="remove_fixed_price_freeze" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleFixedPriceFreeeze()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         </div>
                     </div>
@@ -3153,7 +3337,7 @@ class Item extends React.Component {
                 <div id="popup-remove-erc1155-fixed-price-01" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Follow steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -3163,22 +3347,22 @@ class Item extends React.Component {
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-check"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Remove</p>
-                                        <p className="popup-item-info-txt">Remove from sale</p>
+                                        <p className="popup-item-info-ttl">{t('Remove')}</p>
+                                        <p className="popup-item-info-txt">{t('Remove from sell')}</p>
                                     </div>
                                 </div>
-                                <a id="remove_erc1155_fixed_price_request" className="btn btn-full btn-blue" onClick={() => this.handleERC1155FixedPriceRemoveSale()}><span className="txt">Start now</span></a>
+                                <a id="remove_erc1155_fixed_price_request" className="btn btn-full btn-blue" onClick={() => this.handleERC1155FixedPriceRemoveSale()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         
                             <div className="popup-item">
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-arrow-up"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Freeze</p>
-                                        <p className="popup-item-info-txt">Freeze your nft token</p>
+                                        <p className="popup-item-info-ttl">{t('Freeze')}</p>
+                                        <p className="popup-item-info-txt">{t('Freeze your nft token')}</p>
                                     </div>
                                 </div>
-                                <a id="remove_erc1155_fixed_price_freeze" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleERC1155FixedPriceFreeeze()}><span className="txt">Start now</span></a>
+                                <a id="remove_erc1155_fixed_price_freeze" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleERC1155FixedPriceFreeeze()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         </div>
                     </div>
@@ -3187,7 +3371,7 @@ class Item extends React.Component {
                 <div id="popup-remove-auction-01" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Follow steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -3197,22 +3381,22 @@ class Item extends React.Component {
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-check"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Remove</p>
-                                        <p className="popup-item-info-txt">Remove from sale</p>
+                                        <p className="popup-item-info-ttl">{t('Remove')}</p>
+                                        <p className="popup-item-info-txt">{t('Remove from sell')}</p>
                                     </div>
                                 </div>
-                                <a id="remove_auction_request" className="btn btn-full btn-blue" onClick={() => this.handleAuctionRemoveSale()}><span className="txt">Start now</span></a>
+                                <a id="remove_auction_request" className="btn btn-full btn-blue" onClick={() => this.handleAuctionRemoveSale()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         
                             <div className="popup-item">
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-arrow-up"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Freeze</p>
-                                        <p className="popup-item-info-txt">Freeze your nft token</p>
+                                        <p className="popup-item-info-ttl">{t('Freeze')}</p>
+                                        <p className="popup-item-info-txt">{t('Freeze your nft token')}</p>
                                     </div>
                                 </div>
-                                <a id="remove_auction_freeze" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleAuctionFreeeze()}><span className="txt">Start now</span></a>
+                                <a id="remove_auction_freeze" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleAuctionFreeeze()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         </div>
                     </div>
@@ -3221,7 +3405,7 @@ class Item extends React.Component {
                 <div id="popup-remove-erc1155-auction-01" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Follow steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -3231,22 +3415,22 @@ class Item extends React.Component {
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-check"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Remove</p>
-                                        <p className="popup-item-info-txt">Remove from sale</p>
+                                        <p className="popup-item-info-ttl">{t('Remove')}</p>
+                                        <p className="popup-item-info-txt">{t('Remove from sell')}</p>
                                     </div>
                                 </div>
-                                <a id="remove_erc1155_auction_request" className="btn btn-full btn-blue" onClick={() => this.handleERC1155AuctionRemoveSale()}><span className="txt">Start now</span></a>
+                                <a id="remove_erc1155_auction_request" className="btn btn-full btn-blue" onClick={() => this.handleERC1155AuctionRemoveSale()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         
                             <div className="popup-item">
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-arrow-up"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Freeze</p>
-                                        <p className="popup-item-info-txt">Freeze your nft token</p>
+                                        <p className="popup-item-info-ttl">{t('Freeze')}</p>
+                                        <p className="popup-item-info-txt">{t('Freeze your nft token')}</p>
                                     </div>
                                 </div>
-                                <a id="remove_erc1155_auction_freeze" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleERC1155AuctionFreeeze()}><span className="txt">Start now</span></a>
+                                <a id="remove_erc1155_auction_freeze" className="btn btn-full btn-blue btn-ready" onClick={() => this.handleERC1155AuctionFreeeze()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         </div>
                     </div>
@@ -3255,21 +3439,21 @@ class Item extends React.Component {
                 <div id="popup-fee-distribution-01" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Copyright Fee Distribution</p>
+                            <p className="popup-head-ttl">{t('Copyright Fee Distribution')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
                         </div>
                         <div className="popup-body">
-                            <p className="popup-lead">You can change the fee distribution receivers and percentage.</p>
+                            <p className="popup-lead">{t('You can change the fee distribution receivers and percentage.')}</p>
                             <table className="popup-table">
                                 <thead>
                                     <tr>
                                         <th style={{width: "80%"}}>
-                                            Fee Receiver
+                                            {t('Fee Receiver')}
                                         </th>
                                         <th>
-                                            Percent
+                                            {t('Percent')}
                                         </th>
                                     </tr>
                                 </thead>
@@ -3279,16 +3463,16 @@ class Item extends React.Component {
                             <div className="fee-operations">
                                 <a id="btn_add_fee"  className="btn btn-h40 btn-fs-14" onClick={() => this.handleAddFeeDistribution()}>
                                     <span className="ico ico-l"><i className="fas fa-plus"></i></span>
-                                    <span className="txt">Add</span>
+                                    <span className="txt">{t('Add')}</span>
                                 </a>
                                 <a id="btn_remove_fee"  className="btn btn-h40 btn-fs-14" onClick={() => this.handleRemoveFeeDistribution()}>
                                     <span className="ico ico-l"><i className="fas fa-minus"></i></span>
-                                    <span className="txt">Remove</span>
+                                    <span className="txt">{t('Remove')}</span>
                                 </a>
                             </div>
 
-                            <a id="popup-fee-continue" className="btn btn-full btn-blue mb-8" onClick={() => this.handleFeeDistribution()}><span className="txt">I understand, continue</span></a>
-                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">Cancel</span></a>
+                            <a id="popup-fee-continue" className="btn btn-full btn-blue mb-8" onClick={() => this.handleFeeDistribution()}><span className="txt">{t('I understand, continue')}</span></a>
+                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">{t('Cancel')}</span></a>
                         </div>
                     </div>
                 </div>
@@ -3296,7 +3480,7 @@ class Item extends React.Component {
                 <div id="popup-burn-01" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Follow steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -3306,11 +3490,11 @@ class Item extends React.Component {
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-arrow-up"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Burn</p>
-                                        <p className="popup-item-info-txt">Burn this token forever.</p>
+                                        <p className="popup-item-info-ttl">{t('Burn')}</p>
+                                        <p className="popup-item-info-txt">{t('Burn this token forever.')}</p>
                                     </div>
                                 </div>
-                                <a id="burn_token" className="btn btn-full btn-blue" onClick={() => this.handleBurn()}><span className="txt">Start now</span></a>
+                                <a id="burn_token" className="btn btn-full btn-blue" onClick={() => this.handleBurn()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         </div>
                     </div>
@@ -3319,15 +3503,15 @@ class Item extends React.Component {
                 <div id="popup-erc1155-burn-01" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Burn</p>
+                            <p className="popup-head-ttl">{t('Burn')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
                         </div>
                         <div className="popup-body">
-                            <p className="popup-lead">You will burn nft tokens forever.</p>
+                            <p className="popup-lead">{t('You will burn nft tokens forever.')}</p>
                             <div className="amount-panel">
-                                <p>Amount</p>
+                                <p>{t('Amount')}</p>
                                 <input id="burn_amount" type="number" defaultValue="0" min="1" max={this.state.token_info == null? "1": this.state.token_info.token.owned_cnt} onChange={() => this.verifyERC1155Burn()}/>
                             </div>
                             <div id="burn-erc1155-verify-notice" className="popup-verify-notice">
@@ -3335,14 +3519,14 @@ class Item extends React.Component {
                                     <i className="fas fa-info-circle"></i>
                                 </div>
                                 <div className="popup-vn-infos">
-                                    <p id="burn-erc1155-amount-not-correct"className="popup-vn-infos-ttl">Amount is not correct</p>
+                                    <p id="burn-erc1155-amount-not-correct"className="popup-vn-infos-ttl">{t('Amount is not correct.')}</p>
                                 </div>
                                 <div className="popup-vn-avatar">
                                 </div>
                             </div>
 
-                            <a id="popup-burn-erc1155-01-continue" className="btn btn-full btn-blue mb-8" href="#"><span className="txt">I understand, continue</span></a>
-                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">Cancel</span></a>
+                            <a id="popup-burn-erc1155-01-continue" className="btn btn-full btn-blue mb-8" href="#"><span className="txt">{t('I understand, continue')}</span></a>
+                            <a className="btn btn-full btn-cancel mb-8" href="#"><span className="txt">{t('Cancel')}</span></a>
                         </div>
                     </div>
                 </div>
@@ -3350,7 +3534,7 @@ class Item extends React.Component {
                 <div id="popup-erc1155-burn-02" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Follow steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close">
                                 <i className="fas fa-times"></i>
                             </div>
@@ -3360,11 +3544,11 @@ class Item extends React.Component {
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-arrow-up"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Burn</p>
-                                        <p className="popup-item-info-txt">Burn this token forever.</p>
+                                        <p className="popup-item-info-ttl">{t('Burn')}</p>
+                                        <p className="popup-item-info-txt">{t('Burn this token forever.')}</p>
                                     </div>
                                 </div>
-                                <a id="burn_erc1155_token" className="btn btn-full btn-blue" onClick={() => this.handleERC1155Burn()}><span className="txt">Start now</span></a>
+                                <a id="burn_erc1155_token" className="btn btn-full btn-blue" onClick={() => this.handleERC1155Burn()}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         </div>
                     </div>

@@ -1,6 +1,4 @@
 import React from 'react';
-import ReactDOM from 'react-dom';
-import {Redirect} from 'react-router-dom';
 import Web3 from 'web3';
 import '../styles/style.css';
 import {AddClass, ChangeClass} from '../js/common';
@@ -13,14 +11,16 @@ import * as API from '../adapter/api';
 import support_networks from '../globals/support_networks';
 import network_util from '../common/network_util';
 import $ from 'jquery';
+import provider_util from '../common/provider_util';
+import { withTranslation } from 'react-i18next';
+import BASE64 from '../common/BASE64';
 
-import icon_avatar_01 from '../img/common/icon-avatar-01.png';
-import icon_fire from '../img/common/icon-fire.png';
 import icon_art from '../img/upload/art.png';
 import icon_sns from '../img/upload/sns.png';
 import icon_asset from '../img/upload/assets.png';
 import icon_manga from '../img/upload/manga.png';
 import icon_photograph from '../img/upload/photograph.png';
+import icon_heart from '../img/upload/heart.png';
 
 import icon_twitter from '../img/upload/twitter.png';
 import icon_youtube from '../img/upload/youtube.png';
@@ -33,10 +33,10 @@ class UploadDetail extends React.Component {
     constructor(props) {
         super(props);
 
-        var script = document.createElement('script');
-        script.src = '../../js/page/upload-item.js';
-        script.async = true;
-        document.body.appendChild(script);
+        // var script = document.createElement('script');
+        // script.src = './js/page/upload-item.js';
+        // script.async = true;
+        // document.body.appendChild(script);
 
         ChangeClass('upload');
         AddClass('has-popup');
@@ -60,7 +60,9 @@ class UploadDetail extends React.Component {
             chain_id: support_networks.ETHEREUM
         };
 
-        switch_btn_text = this.props.type == CONST.token_type.SINGLE? "Switch to Multiple": "Switch to Single";
+        const { t } = this.props;
+
+        switch_btn_text = this.props.type == CONST.token_type.SINGLE? t("Switch to Multiple"): t("Switch to Single");
     }
 
     componentDidMount() {
@@ -85,18 +87,25 @@ class UploadDetail extends React.Component {
         $("#loading-popup").fadeOut(100);
     }
 
-    getAccounts() {
-        const web3 = new Web3(Web3.givenProvider);
+    async getAccounts() {
+        const { t } = this.props;
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
 
         web3.eth.getAccounts((error,result) => {
             if (error) {
                 console.log(error);
-                alert("Please connect the wallet.");
+                alert(t('Please connect the wallet'));
 
                 this.hideLoading();
             } else {
                 if (result.length < 1) {
-                    alert("Please connect the wallet.");
+                    alert(t('Please connect the wallet'));
 
                     this.hideLoading();
                 } else {
@@ -105,8 +114,8 @@ class UploadDetail extends React.Component {
                     API.get_profile(this.state.address)
                     .then((res) => {
                         if (res.result == false || res.profile == null) {
-                            alert("Not registered user. Please register.");
-                            document.location = "/edit_profile";
+                            alert(t("Not registered user. Please register."));
+                            window.location = config.host_url + "/edit_profile";
                         }
 
                         this.hideLoading();
@@ -132,10 +141,12 @@ class UploadDetail extends React.Component {
         console.log(newContractInstance.options.address); // instance with the new contract address
         this.state.contract_address = newContractInstance.options.address;
 
+        var description = BASE64.encode(document.getElementById("description").value);
+
         API.add_token({
             deployer: this.state.address,
             name: document.getElementById("name").value,
-            description: document.getElementById("description").value,
+            description: description,
             fee_percentage: document.getElementById("percentage").value,
             contract_address: newContractInstance.options.address,
             collection: this.state.selected_collection,
@@ -155,22 +166,32 @@ class UploadDetail extends React.Component {
     }
 
     async deployToken() {
+        const { t } = this.props;
         if (!this.isElementEnabled("deploy_token")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!await this.isCorrectNetwork()) return;
+
         this.showLoading();
 
         var deployer = this.state.address;
 
-        const web3 = new Web3(Web3.givenProvider);
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
 
         const NFT = new web3.eth.Contract(ERC721.abi);
 
         var name = document.getElementById("name").value;
         var description = document.getElementById("description").value;
+        description = BASE64.encode(description);
         var percentage = document.getElementById("percentage").value;
         var copies = document.getElementById("copies").value;
 
@@ -182,7 +203,7 @@ class UploadDetail extends React.Component {
         NFTTx.send({
             from: this.state.address,
         })
-        .on('error', () => this.callbackError('An error occured while deploying token.'))
+        .on('error', () => this.callbackError(t('An error occured while deploying token.')))
         .on('transactionHash', function(transactionHash){  })
         .on('receipt', function(receipt){            
         })
@@ -199,27 +220,37 @@ class UploadDetail extends React.Component {
     }
 
     async mintAll() {
+        const { t } = this.props;
+
         if (!this.isElementEnabled("mint_token")) {
             return false;
         }
 
         if (!await this.isConnected()) return;
 
+        if (!await this.isCorrectNetwork()) return;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
         this.showLoading();
+
+        const web3 = new Web3(provider);
         
         var previewPaths = this.state.preview_png.split("/");
-
-        const web3 = new Web3(Web3.givenProvider);
 
         const NFT = new web3.eth.Contract(ERC721.abi, this.state.contract_address);
 
         var metadata = {
             url: config.token_url + previewPaths[previewPaths.length - 1],
-            description: document.getElementById("description").value
+            description: BASE64.encode(document.getElementById("description").value)
         };
 
         NFT.methods.mintAll(metadata).send({from: this.state.address})
-        .on('error', () => this.callbackError('An error occured while minting tokens.'))
+        .on('error', () => this.callbackError(t('An error occured while minting tokens.')))
         .on('receipt', function(receipt){
             console.log(receipt);
         })
@@ -229,16 +260,25 @@ class UploadDetail extends React.Component {
             API.mint_token(this.state.contract_address, metadata, this.state.chain_id)
             .then((res) => {
                 console.log(res);
-                document.location = "/profile/" + this.state.address;
+                window.location = config.host_url + "/profile/" + this.state.address;
             });
         });
     }
 
     async isConnected() {
-        const web3 = new Web3(Web3.givenProvider);
+        const { t } = this.props;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
         var accounts = await web3.eth.getAccounts();
         if (accounts.length == 0) {
-            alert("Please connect the wallet");
+            alert(t("Please connect the wallet"));
             return false;
         }
         return true;
@@ -273,7 +313,11 @@ class UploadDetail extends React.Component {
     }
 
     onNameChanged = event=>{
-        this.setState({previewName: event.target.value});
+        var title = document.getElementById("name").value;
+        title = title.replace(/"/g, "");
+        document.getElementById("name").value = title;
+
+        this.setState({previewName: title});
     }
 
     isElementEnabled(id) {
@@ -284,59 +328,54 @@ class UploadDetail extends React.Component {
         return true;
     }
 
-    uploadImg() {
+    async uploadImg() {
+        const { t } = this.props;
+
         if (!this.isElementEnabled("upload_token_img")) {
             return false;
         }
 
         if (this.state.preview_png.includes("null_")) {
-            alert("Please connect the wallet.");
+            alert(t('Please connect the wallet'));
             return;
         }
+
+        if (!(await this.isCorrectNetwork())) return;
+
         this.showLoading();
 
-        const web3 = new Web3(Web3.givenProvider);
-        web3.eth.net.getId().then((res) => {
-            if (res != this.state.chain_id) {
-                this.hideLoading();
-
-                alert("Please connect to correct network.");
-                return;
-            } else {
-                var previewPaths = this.state.preview_png.split("/");
+        var previewPaths = this.state.preview_png.split("/");
         
-                axios.get(config.backend_url + "/upload_token_img/" + previewPaths[previewPaths.length - 1])
-                .then((res) => {console.log(res);
-                    if (res.data.result == true) {
-                        if (this.state.protocol_type == CONST.protocol_type.ERC721) {
-                            var uploadBtn = document.getElementById("upload_token_img");
-                            var deployBtn = document.getElementById("deploy_token");
-    
-                            uploadBtn.classList.add("btn-ready");
-                            deployBtn.classList.remove("btn-ready");
-                        } else {
-                            var uploadBtn = document.getElementById("upload_erc1155_token_img");
-                            var mintBtn = document.getElementById("mint_erc1155_token");
-    
-                            uploadBtn.classList.add("btn-ready");
-                            mintBtn.classList.remove("btn-ready");
-                        }
+        axios.get(config.backend_url + "/upload_token_img/" + previewPaths[previewPaths.length - 1])
+        .then((res) => {console.log(res);
+            if (res.data.result == true) {
+                if (this.state.protocol_type == CONST.protocol_type.ERC721) {
+                    var uploadBtn = document.getElementById("upload_token_img");
+                    var deployBtn = document.getElementById("deploy_token");
 
-                        this.hideLoading();
-                    }
-                })
-                .catch((err) => {
-                    console.log(err);
-                })
+                    uploadBtn.classList.add("btn-ready");
+                    deployBtn.classList.remove("btn-ready");
+                } else {
+                    var uploadBtn = document.getElementById("upload_erc1155_token_img");
+                    var mintBtn = document.getElementById("mint_erc1155_token");
+
+                    uploadBtn.classList.add("btn-ready");
+                    mintBtn.classList.remove("btn-ready");
+                }
+
+                this.hideLoading();
             }
-        });
+        })
+        .catch((err) => {
+            console.log(err);
+        })
     }
 
     handleSwith() {
         if (this.props.type == CONST.token_type.SINGLE) {
-            document.location = "/upload/detail/" + CONST.token_type.MULTIPLE;
+            window.location = config.host_url + "/upload/detail/" + CONST.token_type.MULTIPLE;
         } else {
-            document.location = "/upload/detail/" + CONST.token_type.SINGLE;
+            window.location = config.host_url + "/upload/detail/" + CONST.token_type.SINGLE;
         }
     }
 
@@ -383,6 +422,8 @@ class UploadDetail extends React.Component {
     }
 
     async isValidInput() {
+        const { t } = this.props;
+
         var name = document.getElementById("name").value;
         var description = document.getElementById("description").value;
         var preview_png = document.getElementById("preview_png").src;
@@ -390,48 +431,41 @@ class UploadDetail extends React.Component {
         var copies = document.getElementById("copies").value;
         
         if (name == "") {
-            alert("Please input name.");
+            alert(t("Please input name."));
             return false;
         }
 
         if (description == "") {
-            alert("Please input description.");
+            alert(t("Please input description."));
             return false;
         }
 
         if (isNaN(copies) || copies <= 0) {
-            alert("Please input valid copies.");
+            alert(t("Please input valid copies."));
             return false;
         }
 
         if (preview_png.includes("default_token.png")) {
-            alert("Please select token image.");
+            alert(t("Please select token image."));
             return false;
         }
 
         if (percentage != parseInt(percentage)) {
-            alert("Fee percentage must be integer.");
+            alert(t("Fee percentage must be integer."));
             return false;
         }
 
         if (percentage > 30) {
-            alert("Maximum fee percentage is 30%.");
+            alert(t("Maximum fee percentage is 30%."));
             return false;
         }
 
         if (copies != parseInt(copies)) {
-            alert("Copies must be integer.");
+            alert(t("Copies must be integer."));
             return false;
         }
 
-        const web3 = new Web3(Web3.givenProvider);
-
-        var chain_id = await web3.eth.net.getId();
-        if (chain_id != this.state.chain_id) {
-            alert("Please select correct network.");
-            return false;
-        }
-
+        if (!(await this.isCorrectNetwork())) return false;
         return true;
     }
 
@@ -450,8 +484,11 @@ class UploadDetail extends React.Component {
     }
 
     async deployERC1155Token() {
+        const { t } = this.props;
+
         var name = document.getElementById("name").value;
         var description = document.getElementById("description").value;
+        description = BASE64.encode(description);
         var preview_png = document.getElementById("preview_png").src;
         var copies = document.getElementById("copies").value;
         var fee_percentage = document.getElementById("percentage").value;
@@ -477,18 +514,21 @@ class UploadDetail extends React.Component {
         }
 
         if (!await this.isConnected()) return;
-
-        this.showLoading();
         
         var previewPaths = this.state.preview_png.split("/");
 
-        const web3 = new Web3(Web3.givenProvider);
+        if (!(await this.isCorrectNetwork())) return;
+
+        this.showLoading();
+
+        var provider = await provider_util.get_current_provider();
+        var web3 = new Web3(provider);
 
         const NFT = new web3.eth.Contract(ERC1155, network_util.get_erc1155(this.state.chain_id));
 
         var metadata = {
             url: config.token_url + previewPaths[previewPaths.length - 1],
-            description: document.getElementById("description").value,
+            description: description,
             name: name
         };
 
@@ -498,7 +538,7 @@ class UploadDetail extends React.Component {
         }];
 
         NFT.methods.mint(tokenId, [[this.state.address, 100]], copies, JSON.stringify(metadata)).send({from: this.state.address})
-        .on('error', () => this.callbackError('An error occured while minting tokens.'))
+        .on('error', () => this.callbackError(t('An error occured while minting tokens.')))
         .on('receipt', function(receipt){
             console.log(receipt);
         })
@@ -517,13 +557,14 @@ class UploadDetail extends React.Component {
 
                     this.hideLoading();
                 } else {
-                    this.callbackError('An error occured while minting tokens.');
+                    this.callbackError(t('An error occured while minting tokens.'));
                 }
             });
         });
     }
 
     async setERC1155TokenFee() {
+        const { t } = this.props;
         var fee_percentage = document.getElementById("percentage").value;
 
         if (!this.isElementEnabled("set_erc1155_fee")) {
@@ -532,25 +573,55 @@ class UploadDetail extends React.Component {
 
         if (!await this.isConnected()) return;
 
+        if (!(await this.isCorrectNetwork())) return;
+
         this.showLoading();
 
-        const web3 = new Web3(Web3.givenProvider);
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
 
         const NFT = new web3.eth.Contract(ERC1155, network_util.get_erc1155(this.state.chain_id));
 
         NFT.methods.setCopyRightFee(this.state.erc1155_token_id, fee_percentage).send({from: this.state.address})
-        .on('error', () => this.callbackError('An error occured while setting fee of tokens.'))
+        .on('error', () => this.callbackError(t('An error occured while setting fee of tokens.')))
         .on('receipt', function(receipt){
             console.log(receipt);
         })
         .then((res) => {
             console.log(res);
 
-            document.location = "/profile/" + this.state.address;
+            window.location = config.host_url + "/profile/" + this.state.address;
         });
     }
 
+    async isCorrectNetwork() {
+        const { t } = this.props;
+
+        var provider = await provider_util.get_current_provider();
+
+        if (provider == null) {
+            return;
+        }
+
+        const web3 = new Web3(provider);
+
+        var chain_id = await web3.eth.net.getId();
+        if (chain_id != this.state.chain_id) {
+            alert(t('Please select correct network.'));
+            return false;
+        }
+
+        return true;
+    }
+
     render() {
+        const { t } = this.props;
+
         var style_hidden = {display: 'none'};
         var style_selected = {
             borderWidth: '2px',
@@ -565,46 +636,46 @@ class UploadDetail extends React.Component {
                         <div className="upload-item-content-wrapper">
                             <main>
                                 <div className="uic-main-head">
-                                    <h2 className="uic-main-head-ttl">Create single<br/>collectible</h2>
+                                    <h2 className="uic-main-head-ttl">{this.props.type == CONST.token_type.SINGLE? t("Create single collectible"): t("Create multiple collectible")}</h2>
                                     <a className="btn btn-h48 btn-switch-mode" onClick={() => this.handleSwith()}><span className="txt">{switch_btn_text}</span></a>
                                 </div>
 
                                 <div className="uic-main-body">
                                     <div className="uic-main-item mb-40">
-                                        <p className="uic-main-item-ttl">Upload file</p>
-                                        <p className="uic-main-item-txt">Drag or choose your file to upload</p>
+                                        <p className="uic-main-item-ttl">{t("Upload file")}</p>
+                                        <p className="uic-main-item-txt">{t("Drag or choose your file to upload")}</p>
                                         <div className="uic-main-item-field-upload mt-16" onClick={this.handleThumbnail}>
                                             <div className="uic-main-item-field-upload-inner">
                                                 <div className="uic-main-item-field-upload-icon">
                                                     <i className="fas fa-file-upload"></i>
                                                 </div>
-                                                <p className="uic-main-item-field-upload-txt">Please select image file.</p>
+                                                <p className="uic-main-item-field-upload-txt">{t('Please select image file.')}</p>
                                                 <input id="thumbnail" accept="image/*" type="file" style={{display: "none"}} onChange={this.onFileChanged}/>
                                             </div>
                                         </div>
                                     </div>
 
                                     <div className="uic-main-item uic-main-item-detail">
-                                        <p className="uic-main-item-ttl">Item Details</p>
+                                        <p className="uic-main-item-ttl">{t('Item Details')}</p>
                                         <div className="uic-main-item-field-detail">
-                                            <p className="uic-main-item-field-detail-ttl">ITEM NAME</p>
+                                            <p className="uic-main-item-field-detail-ttl">{t('ITEM NAME')}</p>
                                             <input id="name" type="text" placeholder="e.g. &#34;Art that expresses the universe&#34;" onChange={this.onNameChanged}/>
                                         </div>
                                         <div className="uic-main-item-field-detail">
-                                            <p className="uic-main-item-field-detail-ttl">DESCRIPTION</p>
+                                            <p className="uic-main-item-field-detail-ttl">{t('DESCRIPTION')}</p>
                                             <textarea id="description" type="text" placeholder="e.g. &#34;This is a Non Fungible Token of art that geometrically represents the universe.&#8230;&#34;"/>
                                         </div>
                                         <div className="uic-main-item-field-detail">
                                             <div className="uic-main-item-field-detail-row">
                                                 <div className="uic-main-item-field-detail-col">
-                                                    <p className="uic-main-item-field-detail-ttl">Fee Percentage</p>
+                                                    <p className="uic-main-item-field-detail-ttl">{t('Fee Percentage')}</p>
                                                     <div className="fee-percentage">
                                                         <input id="percentage" type="number" defaultValue="1" min="0" max="30"/>
                                                         <p>%</p>
                                                     </div>
                                                 </div>
                                                 <div className="uic-main-item-field-detail-col" style={this.props.type == CONST.token_type.SINGLE? style_hidden: {}}>
-                                                    <p className="uic-main-item-field-detail-ttl">Copies</p>
+                                                    <p className="uic-main-item-field-detail-ttl">{t('Copies')}</p>
                                                     <input id="copies" type="number" min="1" defaultValue="1" placeholder="e.g. Copies"/>
                                                 </div>
                                                 {/* <div className="uic-main-item-field-detail-col">
@@ -616,38 +687,38 @@ class UploadDetail extends React.Component {
                                     </div>
 
                                     <div className="uic-main-item">
-                                        <p className="uic-main-item-ttl">ERC/BEP 1155 Token</p>
-                                        <p className="uic-main-item-txt">You will create your nft token using ERC/BEP 1155 token protocol.</p>
+                                        <p className="uic-main-item-ttl">{t('ERC/BEP 1155 Token')}</p>
+                                        <p className="uic-main-item-txt">{t('You will create your nft token using ERC/BEP 1155 token protocol.')}</p>
                                         <div className="uic-main-item-field-check">
                                             <input id="chk-erc1155" type="checkbox" defaultChecked={this.state.protocol_type == CONST.protocol_type.ERC1155} onClick={() => this.handleProtocolType()}/>
-                                            <label for="chk-erc1155"></label>
+                                            <label htmlFor="chk-erc1155"></label>
                                         </div>
                                     </div>
 
                                     <div className="uic-main-item">
-                                        <p className="uic-main-item-ttl">ERC/BEP 721 Token</p>
-                                        <p className="uic-main-item-txt">You will create your nft token using ERC/BEP 721 token protocol.</p>
+                                        <p className="uic-main-item-ttl">{t('ERC/BEP 721 Token')}</p>
+                                        <p className="uic-main-item-txt">{t('You will create your nft token using ERC/BEP 721 token protocol.')}</p>
                                         <div className="uic-main-item-field-check">
                                             <input id="chk-erc721" type="checkbox" defaultChecked={this.state.protocol_type == CONST.protocol_type.ERC721} onClick={() => this.handleProtocolType()}/>
-                                            <label for="chk-erc721"></label>
+                                            <label htmlFor="chk-erc721"></label>
                                         </div>
                                     </div>
 
                                     <div className="uic-main-item">
                                         <p className="uic-main-item-ttl">Ethereum</p>
-                                        <p className="uic-main-item-txt">You will create your nft token on ethereum.</p>
+                                        <p className="uic-main-item-txt">{t('You will create your nft token on ethereum.')}</p>
                                         <div className="uic-main-item-field-check">
                                             <input id="chk-ethereum" type="checkbox" defaultChecked={this.state.chain_id == support_networks.ETHEREUM} onClick={() => this.handleChainType()}/>
-                                            <label for="chk-ethereum"></label>
+                                            <label htmlFor="chk-ethereum"></label>
                                         </div>
                                     </div>
 
                                     <div className="uic-main-item">
                                         <p className="uic-main-item-ttl">Binance Smart Chain</p>
-                                        <p className="uic-main-item-txt">You will create your nft token on binance smart chain.</p>
+                                        <p className="uic-main-item-txt">{t('You will create your nft token on binance smart chain.')}</p>
                                         <div className="uic-main-item-field-check">
                                             <input id="chk-bsc" type="checkbox" defaultChecked={this.state.chain_id == support_networks.BSC} onClick={() => this.handleChainType()}/>
-                                            <label for="chk-bsc"></label>
+                                            <label htmlFor="chk-bsc"></label>
                                         </div>
                                     </div>
 
@@ -656,13 +727,13 @@ class UploadDetail extends React.Component {
                                         <p className="uic-main-item-txt">Content will be unlocked after successful transaction</p>
                                         <div className="uic-main-item-field-check">
                                             <input id="uic-chk-03" type="checkbox" />
-                                            <label for="uic-chk-03"></label>
+                                            <label htmlFor="uic-chk-03"></label>
                                         </div>
                                     </div> */}
 
                                     <div className="uic-main-item mb-40">
-                                        <p className="uic-main-item-ttl">Choose collection</p>
-                                        <p className="uic-main-item-txt">Choose an existing collection.</p>
+                                        <p className="uic-main-item-ttl">{t('Choose collection')}</p>
+                                        <p className="uic-main-item-txt">{t('Choose an existing collection.')}</p>
                                         <div className="uic-main-item-field-collection-wrapper">
                                             <div className="uic-main-item-field-collection">
                                                 {/* <div className="uic-main-item-field-collection-item">
@@ -688,6 +759,9 @@ class UploadDetail extends React.Component {
                                                                 break;
                                                             case 4: 
                                                                 collection_img = icon_sns;
+                                                                break;
+                                                            case 5:
+                                                                collection_img = icon_heart;
                                                                 break;
                                                         }
 
@@ -718,29 +792,29 @@ class UploadDetail extends React.Component {
 
                                         <div className="uic-main-item-field-collection-wrapper">
                                             <div className="uic-main-item-field-collection">
-                                                <a className="uic-main-item-field-collection-item" href={"/upload/twitter/" + this.props.type}>
+                                                <a className="uic-main-item-field-collection-item" href={config.host_url + "/upload/twitter/" + this.props.type}>
                                                     <div className="uic-main-item-field-collection-item-icon">
                                                         <img src={icon_twitter} />
                                                     </div>
-                                                    <p className="uic-main-item-field-collection-item-txt">Twitter</p>
+                                                    <p className="uic-main-item-field-collection-item-txt">{t('Twitter')}</p>
                                                 </a>
-                                                <a className="uic-main-item-field-collection-item" href={"/upload/youtube/" + this.props.type}>
+                                                <a className="uic-main-item-field-collection-item" href={config.host_url + "/upload/youtube/" + this.props.type}>
                                                     <div className="uic-main-item-field-collection-item-icon">
                                                         <img src={icon_youtube} />
                                                     </div>
-                                                    <p className="uic-main-item-field-collection-item-txt">Youtube</p>
+                                                    <p className="uic-main-item-field-collection-item-txt">{t('Youtube')}</p>
                                                 </a>
-                                                <a className="uic-main-item-field-collection-item" href={"/upload/tiktok/" + this.props.type}>
+                                                <a className="uic-main-item-field-collection-item" href={config.host_url + "/upload/tiktok/" + this.props.type}>
                                                     <div className="uic-main-item-field-collection-item-icon">
                                                         <img src={icon_tiktok} />
                                                     </div>
-                                                    <p className="uic-main-item-field-collection-item-txt">TikTok</p>
+                                                    <p className="uic-main-item-field-collection-item-txt">{t('TikTok')}</p>
                                                 </a>
-                                                <a className="uic-main-item-field-collection-item" href={"/upload/instagram/" + this.props.type}>
+                                                <a className="uic-main-item-field-collection-item" href={config.host_url + "/upload/instagram/" + this.props.type}>
                                                     <div className="uic-main-item-field-collection-item-icon">
                                                         <img src={icon_insta} />
                                                     </div>
-                                                    <p className="uic-main-item-field-collection-item-txt">Instagram</p>
+                                                    <p className="uic-main-item-field-collection-item-txt">{t('Instagram')}</p>
                                                 </a>
                                             </div>
                                         </div>
@@ -748,10 +822,10 @@ class UploadDetail extends React.Component {
 
                                     <div className="ui-main-submit-row">
                                         <a id="btn-preview" className="btn btn-full btn-h48 mb-12" href="#">
-                                            <span className="txt">Preview</span>
+                                            <span className="txt">{t("Preview")}</span>
                                         </a>
                                         <a id="btn-create-item" className="btn btn-blue btn-h48" onClick={() => this.handleCreateItem()}>
-                                            <span className="txt">Create item</span>
+                                            <span className="txt">{t("Create item")}</span>
                                             <span className="ico"><i className="fas fa-long-arrow-alt-right"></i></span>
                                         </a>
                                         <div className="ui-main-submit-progress" style={{display: "none"}}>
@@ -764,7 +838,7 @@ class UploadDetail extends React.Component {
                             <aside>
                                 <div className="uic-preview-box">
                                     <div className="uic-preview-ttl-wrapper">
-                                        <p className="uic-preview-ttl">Preview</p>
+                                        <p className="uic-preview-ttl">{t('Preview')}</p>
                                         <div id="btn-uic-preview-close" className="uic-preview-close"><i className="fas fa-times"></i></div>
                                     </div>
                                     <div className="uic-preview-figure">
@@ -772,7 +846,7 @@ class UploadDetail extends React.Component {
                                     </div>
                                     <div className="uic-preview-infos info-block-tsb">
                                         <div className="ttl">
-                                            {this.state.previewName}
+                                            <p className="name">{this.state.previewName}</p>
                                             <p className="ttl-mark eth-mark">0.27 ETH</p>
                                         </div>
                                         <div className="stock">
@@ -787,12 +861,12 @@ class UploadDetail extends React.Component {
                                                     <img src={icon_avatar_01} alt=""/>
                                                 </div> */}
                                             </div>
-                                            <p className="stock-txt">3 in Stock</p>
+                                            <p className="stock-txt">{t('in Stock', {count: 3})}</p>
                                         </div>
                                         <div className="bottom">
                                             <div className="bottom-l">
                                                 <span className="icon"><i className="fas fa-sliders-h"></i></span>
-                                                <span className="txt">Highest bid</span>
+                                                <span className="txt">{t('Highest bid')}</span>
                                                 <span className="price">0.001 ETH</span>
                                             </div>
                                             {/* <div className="bottom-r">
@@ -802,7 +876,7 @@ class UploadDetail extends React.Component {
                                     </div>
                                     <a className="uic-preview-close-all" onClick={() => window.location.reload()}>
                                         <span className="ico"><i className="far fa-times-circle"></i></span>
-                                        <span className="txt">Clear all</span>
+                                        <span className="txt">{t('Clear all')}</span>
                                     </a>
                                 </div>
                             </aside>
@@ -813,7 +887,7 @@ class UploadDetail extends React.Component {
                 <div id="erc721_popup" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Flow Steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close" onClick={() => this.handleClosePopup()}>
                                 <i className="fas fa-times"></i>
                             </div>
@@ -823,33 +897,33 @@ class UploadDetail extends React.Component {
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-file-upload"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Upload file</p>
-                                        <p className="popup-item-info-txt">Upload token image.</p>
+                                        <p className="popup-item-info-ttl">{t('Upload file')}</p>
+                                        <p className="popup-item-info-txt">{t('Upload token image.')}</p>
                                     </div>
                                 </div>
-                                <a id="upload_token_img" className="btn btn-full btn-blue" onClick={this.uploadImg.bind(this)}><span className="txt">Start now</span></a>
+                                <a id="upload_token_img" className="btn btn-full btn-blue" onClick={this.uploadImg.bind(this)}><span className="txt">{t('Start now')}</span></a>
                             </div>
 
                             <div className="popup-item">
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-pencil-alt"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Deploy</p>
-                                        <p className="popup-item-info-txt">Deploy NFT Token.</p>
+                                        <p className="popup-item-info-ttl">{t('Deploy')}</p>
+                                        <p className="popup-item-info-txt">{t('Deploy NFT Token.')}</p>
                                     </div>
                                 </div>
-                                <a id="deploy_token" className="btn btn-blue btn-full btn-ready" onClick={this.deployToken.bind(this)}><span className="txt">Start now</span></a>
+                                <a id="deploy_token" className="btn btn-blue btn-full btn-ready" onClick={this.deployToken.bind(this)}><span className="txt">{t('Start now')}</span></a>
                             </div>
 
                             <div className="popup-item">
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-lock"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Mint</p>
-                                        <p className="popup-item-info-txt">Mint NFT Token.</p>
+                                        <p className="popup-item-info-ttl">{t('Mint')}</p>
+                                        <p className="popup-item-info-txt">{t('Mint NFT Token.')}</p>
                                     </div>
                                 </div>
-                                <a id="mint_token" className="btn btn-blue btn-full btn-ready" onClick={this.mintAll.bind(this)}><span className="txt">Start now</span></a>
+                                <a id="mint_token" className="btn btn-blue btn-full btn-ready" onClick={this.mintAll.bind(this)}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         </div>
                     </div>
@@ -858,7 +932,7 @@ class UploadDetail extends React.Component {
                 <div id="erc1155_popup" className="popup">
                     <div className="popup-box">
                         <div className="popup-head">
-                            <p className="popup-head-ttl">Flow Steps</p>
+                            <p className="popup-head-ttl">{t('Flow Steps')}</p>
                             <div id="popup-close" className="icon icon-40 popup-close" onClick={() => this.handleClosePopup()}>
                                 <i className="fas fa-times"></i>
                             </div>
@@ -868,33 +942,33 @@ class UploadDetail extends React.Component {
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-file-upload"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Upload file</p>
-                                        <p className="popup-item-info-txt">Upload token image.</p>
+                                        <p className="popup-item-info-ttl">{t('Upload file')}</p>
+                                        <p className="popup-item-info-txt">{t('Upload token image.')}</p>
                                     </div>
                                 </div>
-                                <a id="upload_erc1155_token_img" className="btn btn-full btn-blue" onClick={this.uploadImg.bind(this)}><span className="txt">Start now</span></a>
+                                <a id="upload_erc1155_token_img" className="btn btn-full btn-blue" onClick={this.uploadImg.bind(this)}><span className="txt">{t('Start now')}</span></a>
                             </div>
 
                             <div className="popup-item">
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-pencil-alt"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Mint</p>
-                                        <p className="popup-item-info-txt">Mint NFT Token.</p>
+                                        <p className="popup-item-info-ttl">{t('Mint')}</p>
+                                        <p className="popup-item-info-txt">{t('Mint NFT Token.')}</p>
                                     </div>
                                 </div>
-                                <a id="mint_erc1155_token" className="btn btn-blue btn-full btn-ready" onClick={this.deployERC1155Token.bind(this)}><span className="txt">Start now</span></a>
+                                <a id="mint_erc1155_token" className="btn btn-blue btn-full btn-ready" onClick={this.deployERC1155Token.bind(this)}><span className="txt">{t('Start now')}</span></a>
                             </div>
 
                             <div className="popup-item">
                                 <div className="popup-item-row">
                                     <div className="popup-item-icon"><i className="fas fa-lock"></i></div>
                                     <div className="popup-item-info">
-                                        <p className="popup-item-info-ttl">Fee Percentage</p>
-                                        <p className="popup-item-info-txt">Set token's fee percentage.</p>
+                                        <p className="popup-item-info-ttl">{t('Fee Percentage')}</p>
+                                        <p className="popup-item-info-txt">{t("Set token's fee percentage.")}</p>
                                     </div>
                                 </div>
-                                <a id="set_erc1155_fee" className="btn btn-blue btn-full btn-ready" onClick={this.setERC1155TokenFee.bind(this)}><span className="txt">Start now</span></a>
+                                <a id="set_erc1155_fee" className="btn btn-blue btn-full btn-ready" onClick={this.setERC1155TokenFee.bind(this)}><span className="txt">{t('Start now')}</span></a>
                             </div>
                         </div>
                     </div>
@@ -904,7 +978,7 @@ class UploadDetail extends React.Component {
                     <div className="popup-box">
                         <div className="loading-popup-head">
                             <div className="loader"></div>
-                            <p className="loading-popup-head-ttl">Please wait...</p>
+                            <p className="loading-popup-head-ttl">{t('Please wait...')}</p>
                         </div>
                     </div>
                 </div>
@@ -913,4 +987,4 @@ class UploadDetail extends React.Component {
     }
 }
 
-export default UploadDetail;
+export default withTranslation()(UploadDetail);

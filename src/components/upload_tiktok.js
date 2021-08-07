@@ -4,12 +4,10 @@ import '../styles/style.css';
 import {AddClass, ChangeClass} from '../js/common';
 import config from '../globals/config';
 import CONST from '../globals/constants';
-import TwitterLogin from 'react-twitter-login';
-import {Timeline, Tweet} from 'react-twitter-widgets';
 import axios from 'axios';
 import $ from 'jquery';
 
-class UploadTwitterPage extends React.Component {
+class UploadTiktokPage extends React.Component {
     constructor(props) {
         super(props);
 
@@ -86,31 +84,10 @@ class UploadTwitterPage extends React.Component {
           <section id="upload-lead" className="upload-lead">
               <div className="content sns-div align-center">
                 {!this.state.isLoggedIn &&
-                <TwitterLogin
-                  authCallback={this.authHandler}
-                  consumerKey={config.twitter_consumer_key}
-                  consumerSecret={config.twitter_consumer_security}
-                  buttonTheme = "dark"
-                />
+                <div></div>
                 }
                 {this.state.isLoggedIn &&
-                  this.state.tweets_list.map((item, index) => {
-                    if (this.state.tweets_list.length == index + 1) {
-                      return (
-                        <div className="sns-div-item">
-                          <a className="btn btn-h32 btn-blue" onClick={() => this.onTweetCreate(item.id)}><span>Create NFT</span></a>
-                          <Tweet key={index} tweetId={item.id} options={{ width: "300" }} onLoad={() => this.hideLoading()}/>
-                        </div>
-                      )
-                    } else {
-                      return (
-                        <div className="sns-div-item">
-                          <a className="btn btn-h32 btn-blue" onClick={() => this.onTweetCreate(item.id)}><span>Create NFT</span></a>
-                          <Tweet key={index} tweetId={item.id} options={{ width: "300" }}/>
-                        </div>
-                      )
-                    }
-                  })
+                  <div></div>
                 }
               </div>
           </section>
@@ -128,4 +105,4 @@ class UploadTwitterPage extends React.Component {
     }
 }
 
-export default UploadTwitterPage;
+export default UploadTiktokPage;

@@ -40,8 +40,15 @@ class Discover extends React.Component {
         this.getLastTokens(this.state.selected_tab, support_networks.NONE);
     }
 
+    componentDidUpdate() {
+        var script = document.createElement('script');
+        script.src = './js/page/home.js';
+        script.async = true;
+        document.body.appendChild(script);
+    }
+
     getLastTokens(index, chain_id) {
-        API.get_last_tokens(8, chain_id, index)
+        API.get_last_tokens(20, chain_id, index)
         .then((res) => {
             if (res.result) {console.log(res);
                 this.setState({
@@ -52,7 +59,7 @@ class Discover extends React.Component {
     }
 
     getLikesTokens(index, chain_id) {
-        API.get_most_like_tokens(8, chain_id, index)
+        API.get_most_like_tokens(20, chain_id, index)
         .then((res) => {
             if (res.result) {
                 this.setState({
@@ -209,13 +216,13 @@ class Discover extends React.Component {
 
                                     return (
                                         <div className="swiper-slide">
-                                            <div className="discover-item" onClick={() => document.location="/item/" + item.id}>
+                                            <div className="discover-item" onClick={() => window.location = config.host_url + "/item/" + item.id}>
                                                 <div className="discover-item-figure">
                                                     <img src={JSON.parse(item.metadata).url} alt="" />
                                                 </div>
                                                 <div className="discover-item-infos info-block-tsb">
                                                     <div className="ttl">
-                                                        {item.token_name}
+                                                        <p className="name">{item.token_name}</p>
                                                         <p className="ttl-mark eth-mark">{item.type == CONST.protocol_type.ERC721? "#" + item.token_id: item.owned_cnt + " / " + item.total_supply}</p>
                                                     </div>
                                                     <div className="stock">
@@ -233,7 +240,7 @@ class Discover extends React.Component {
                                                                 })
                                                             }
                                                         </div>
-                                                        <p className="stock-txt">{item.status == CONST.token_status.AUCTION? item.bids.length + t(" in stock"): t("No auction")}</p>
+                                                        <p className="stock-txt">{item.status == CONST.token_status.AUCTION? t("in stock", {count: item.bids.length}): t("No auction")}</p>
                                                     </div>
                                                     <div className="bottom">
                                                         <div className="bottom-l">
@@ -249,11 +256,6 @@ class Discover extends React.Component {
                                 })
                             }
                         </div>
-                    </div>
-
-                    <div className="discover-body-nav">
-                        <div className="swiper-button-prev"><i className="fas fa-long-arrow-alt-left"></i></div>
-                        <div className="swiper-button-next"><i className="fas fa-long-arrow-alt-right"></i></div>
                     </div>
 
                     {/* <a className="discover-load-more btn btn-center" href="#">

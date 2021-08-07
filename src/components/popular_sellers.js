@@ -26,7 +26,7 @@ class PopularSellers extends React.Component {
             users: []
         };
 
-        this.getSellers(this.getTimeStamp(FILTER_TYPE.DAILY));
+        this.getSellers(this.getTimeStamp(FILTER_TYPE.MONTHLY));
     }
 
     getSellers(timestamp) {
@@ -63,7 +63,7 @@ class PopularSellers extends React.Component {
 
     componentDidUpdate() {
         var script = document.createElement('script');
-        script.src = '../../js/page/home.js';
+        script.src = './js/page/home.js';
         script.async = true;
         document.body.appendChild(script);
     }
@@ -80,7 +80,7 @@ class PopularSellers extends React.Component {
                             <span>{t('Sellers')}<i className="fas fa-angle-down"></i></span>
                         </h3>
                         <div className="ps-head-select select-wrapper">
-                            <select id="sel_filter" onChange={() => this.handleFilterChanged()}>
+                            <select id="sel_filter" defaultValue={FILTER_TYPE.MONTHLY} onChange={() => this.handleFilterChanged()}>
                                 <option value={FILTER_TYPE.DAILY}>{t('Daily')}</option>
                                 <option value={FILTER_TYPE.WEEKLY}>{t('Weekly')}</option>
                                 <option value={FILTER_TYPE.MONTHLY}>{t('Monthly')}</option>
@@ -96,7 +96,7 @@ class PopularSellers extends React.Component {
                                     this.state.users.map((item, index) => {
                                         return (
                                             <div className="swiper-slide">
-                                                <div className="ps-item" onClick={() => document.location="/profile/" + item.address}>
+                                                <div className="ps-item" onClick={() => window.location = config.host_url + "/profile/" + item.address}>
                                                     <div className="ps-item-head">
                                                         <a className="ps-item-head-tag tag-01" href="#">
                                                             <i className="fas fa-trophy"></i>

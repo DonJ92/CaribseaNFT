@@ -19,7 +19,7 @@ $(document).ready(function() {
     var swiper_hb = new Swiper('#hb-slide', {
         cssWidthAndHeight: true,
         slidesPerView: 'auto',
-        loop: true, 
+        loop: false, 
         visibilityFullFit: true,
         autoResize: false,
         navigation: {

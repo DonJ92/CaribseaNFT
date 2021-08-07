@@ -535,8 +535,8 @@ function is_following(follower, following) {
     });
 }
 
-function get_my_activity(address) {    
-    var url = config.backend_url + "/get_my_activity/" + address;
+function get_my_activity(address, limit = 0, cnt = 10) {    
+    var url = config.backend_url + "/get_my_activity/" + address + "/" + limit + "/" + cnt;
     
     return new Promise((resolve, reject) => {
         http_com(url)
@@ -549,8 +549,8 @@ function get_my_activity(address) {
     });
 }
 
-function get_all_activity() {    
-    var url = config.backend_url + "/get_all_activity/";
+function get_all_activity(limit = 0, cnt = 10) {    
+    var url = config.backend_url + "/get_all_activity/" + limit + "/" + cnt;
     
     return new Promise((resolve, reject) => {
         http_com(url)
@@ -563,13 +563,13 @@ function get_all_activity() {
     });
 }
 
-function get_activity_with_followings(followings) {
+function get_activity_with_followings(followings, limit = 0, cnt = 10) {
     var query = "";
     followings.forEach((following) => {
         query += "followings=" + following + "&";
     })
     query = query.slice(0, query.length - 1);
-    var url = config.backend_url + "/get_activity_with_followings?" + query;
+    var url = config.backend_url + "/get_activity_with_followings/" + limit + "/" + cnt + "?" + query;
     
     return new Promise((resolve, reject) => {
         http_com(url)
@@ -793,6 +793,20 @@ function add_erc1155_token(token, metadata, chain_id) {
     });
 }
 
+function subscribe(email_address) {
+    var url = config.backend_url + "/subscribe/" + email_address;
+
+    return new Promise((resolve, reject) => {
+        http_com(url)
+        .then((res) => {
+            resolve(res);
+        })
+        .catch((err) => {
+            throw err;
+        })
+    });
+}
+
 function get_tick(symbol) {
     var url = config.tick_url + symbol;
     
@@ -892,5 +906,6 @@ export {
     cancel_erc1155_bid,
     accept_erc1155_bid,
     burn_erc1155_token,
-    get_all_tick
+    get_all_tick,
+    subscribe
 }
