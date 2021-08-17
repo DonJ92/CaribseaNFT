@@ -1,14 +1,13 @@
 var config = {
     chain_id : 0x61, //56: mainnet, 97: testnet 
     blockexplorer_url: 'https://bscscan.com/',
-    //backend_url: 'http://192.168.2.103:4000',
-    backend_url: 'https://192.168.2.103:4443',
+    backend_url: 'http://192.168.2.103:4000',
+    // backend_url: 'https://192.168.2.103:4443',
     avatar_url: 'http://192.168.2.103/caribnft/avatars/',
     cover_url: 'http://192.168.2.103/caribnft/covers/',
     preview_url: 'http://192.168.2.103/caribnft/preview/',
     token_url: 'http://192.168.2.103/caribnft/tokens/',
-    //host_url: 'http://192.168.2.103:3000',
-    host_url: 'https://localhost:3000',
+    host_url: 'http://localhost:3000',
 
     contracts: {
         bsc: {

@@ -18,6 +18,7 @@ var TAB_TYPE = {
     REAL_ASSET: 3,
     Manga: 4,
     SNS: 5,
+    LOVE: 6
 };
 
 var FILTER_TYPE = {
@@ -207,6 +208,7 @@ class Search extends React.Component {
                                     <a className={this.state.selected_tab == TAB_TYPE.REAL_ASSET? "active": ""} onClick={() => this.handleTabSelected(TAB_TYPE.REAL_ASSET)}>{t('Real asset')}</a>
                                     <a className={this.state.selected_tab == TAB_TYPE.Manga? "active": ""} onClick={() => this.handleTabSelected(TAB_TYPE.Manga)}>{t('Manga')}</a>
                                     <a className={this.state.selected_tab == TAB_TYPE.SNS? "active": ""} onClick={() => this.handleTabSelected(TAB_TYPE.SNS)}>{t('SNS')}</a>
+                                    <a className={this.state.selected_tab == TAB_TYPE.LOVE? "active": ""} onClick={() => this.handleTabSelected(TAB_TYPE.LOVE)}>{t('Love')}</a>
                                 </div>
                             </div>
                         </div>

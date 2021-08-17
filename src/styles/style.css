@@ -5970,6 +5970,7 @@ body.profile #profile .profile-inner .profile-body .profile-infos-list {
 
 body.profile #profile .profile-inner .profile-body .profile-infos-list .profile-infos-item {
   width: calc(33.333333% - 32px);
+  height: fit-content;
   margin: 0 16px 32px;
   border-width: thin;
   border-style: solid;

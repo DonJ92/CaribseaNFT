@@ -474,26 +474,58 @@ class Item extends React.Component {
             distributions.push(distribution);
         }
 
-        const NFT = new web3.eth.Contract(ERC721.abi, this.state.token_info.token.token_contract_id);
-        NFT.methods.setFeeDistributionPercentage(
-            validResult.fee_receivers,
-            validResult.fee_percentages
-        ).send({from: this.state.selectedAddress})
-        .on('error', () => this.callbackError(t('An error occured while setting fee distribution.')))
-        .then((res) => {console.log(res);
-            API.set_fee_distribution(this.state.token_info.token.token_contract_id, distributions)
-            .then((res) => {
-                this.hideLoading();
-
-                if (res.result) {
-                    document.location.reload();
-                }
-            })
-            .catch((error) => {
-                console.log(error);
-                this.hideLoading();
+        if (this.state.token_info.token.type == CONST.token_type.ERC721) {
+            const NFT = new web3.eth.Contract(ERC721.abi, this.state.token_info.token.token_contract_id);
+            NFT.methods.setFeeDistributionPercentage(
+                validResult.fee_receivers,
+                validResult.fee_percentages
+            ).send({from: this.state.selectedAddress})
+            .on('error', () => this.callbackError(t('An error occured while setting fee distribution.')))
+            .then((res) => {console.log(res);
+                API.set_fee_distribution(this.state.token_info.token.token_contract_id, distributions)
+                .then((res) => {
+                    this.hideLoading();
+    
+                    if (res.result) {
+                        document.location.reload();
+                    }
+                })
+                .catch((error) => {
+                    console.log(error);
+                    this.hideLoading();
+                });
             });
-        });
+        } else {
+            var ERC1155Distributions = [];
+            for (var i = 0; i < validResult.fee_receivers.length; i++) {
+                var distribution = [];
+                distribution.push(validResult.fee_receivers[i]);
+                distribution.push(validResult.fee_percentages[i])
+
+                ERC1155Distributions.push(distribution);
+            }
+            
+            const NFT = new web3.eth.Contract(ERC1155, this.state.token_info.token.token_contract_id);
+            NFT.methods.setCopyRightFeeDistribution(
+                this.state.token_info.token.token_id,
+                ERC1155Distributions
+            ).send({from: this.state.selectedAddress})
+            .on('error', () => this.callbackError(t('An error occured while setting fee distribution.')))
+            .then((res) => {console.log(res);
+                API.set_erc1155_fee_distribution(this.state.token_info.token.token_contract_id, this.state.token_info.token.token_id, distributions)
+                .then((res) => {
+                    this.hideLoading();
+    
+                    if (res.result) {
+                        document.location.reload();
+                    }
+                })
+                .catch((error) => {
+                    console.log(error);
+                    this.hideLoading();
+                });
+            });
+        }
     }
 
     // getTransferFee() {
@@ -2163,10 +2195,10 @@ class Item extends React.Component {
                                     <div className="item-infos-sell">
                                         <a id="btn_sell" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.selectedAddress == this.state.token_info.token.owner && this.state.token_info.token.status == CONST.token_status.NONE && this.state.token_info.token.type == CONST.protocol_type.ERC721? {}: style_hidden}>{t('List for sell')}</a>
                                         <a id="btn_erc1155_sell" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.selectedAddress == this.state.token_info.token.owner && this.state.token_info.token.status == CONST.token_status.NONE && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {}: style_hidden}>{t('List for sell')}</a>
-                                        <a id="remove_fixed_price_sale" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.FIXED_PRICE && this.state.token_info.token.type == CONST.protocol_type.ERC721? {marginBottom: '0px'}: style_hidden}>{t('Remove from sell')}</a>
-                                        <a id="remove_erc1155_fixed_price_sale" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.FIXED_PRICE && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {marginBottom: '0px'}: style_hidden}>{t('Remove from sell')}</a>
-                                        <a id="remove_auction_sale" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.token_info.token.type == CONST.protocol_type.ERC721? {}: style_hidden}>{t('Remove from sell')}</a>
-                                        <a id="remove_erc1155_auction_sale" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {}: style_hidden}>{t('Remove from sell')}</a>
+                                        <a id="remove_fixed_price_sale" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.selectedAddress == this.state.token_info.token.owner && this.state.token_info.token.status == CONST.token_status.FIXED_PRICE && this.state.token_info.token.type == CONST.protocol_type.ERC721? {marginBottom: '0px'}: style_hidden}>{t('Remove from sell')}</a>
+                                        <a id="remove_erc1155_fixed_price_sale" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.selectedAddress == this.state.token_info.token.owner && this.state.token_info.token.status == CONST.token_status.FIXED_PRICE && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {marginBottom: '0px'}: style_hidden}>{t('Remove from sell')}</a>
+                                        <a id="remove_auction_sale" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.selectedAddress == this.state.token_info.token.owner && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.token_info.token.type == CONST.protocol_type.ERC721? {}: style_hidden}>{t('Remove from sell')}</a>
+                                        <a id="remove_erc1155_auction_sale" className="btn btn-blue" href="#" style={this.state.token_info != null && this.state.selectedAddress == this.state.token_info.token.owner && this.state.token_info.token.status == CONST.token_status.AUCTION && this.state.token_info.token.type == CONST.protocol_type.ERC1155? {}: style_hidden}>{t('Remove from sell')}</a>
                                     </div>
                                     
                                     <div className="item-infos-tags tags-list">
@@ -2336,7 +2368,7 @@ class Item extends React.Component {
                                     <div className="item-infos-tags tags-list ttl_copyright">
                                         <p className="item-copyright">{t('Copyright Fee')} ({this.state.token_info == null? 0: this.state.token_info.token.fee_percentage}%)</p>
                                         <div className="eb-body-block-add" style={this.state.token_info != null && this.state.token_info.deployer.address == this.state.selectedAddress? {}: style_hidden}>
-                                            <a id="btn_edit_fee"  className="btn btn-h40 btn-fs-14" href="#">
+                                            <a id="btn_edit_fee"  className="btn btn-h40 btn-fs-14">
                                                 <span className="ico ico-l"><i className="fas fa-edit"></i></span>
                                                 <span className="txt">{t('Edit')}</span>
                                             </a>

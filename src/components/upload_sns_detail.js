@@ -14,12 +14,14 @@ import $ from 'jquery';
 import provider_util from '../common/provider_util';
 import base64 from 'base-64';
 import { withTranslation } from 'react-i18next';
+import BASE64 from '../common/BASE64';
 
 import icon_art from '../img/upload/art.png';
 import icon_sns from '../img/upload/sns.png';
 import icon_asset from '../img/upload/assets.png';
 import icon_manga from '../img/upload/manga.png';
 import icon_photograph from '../img/upload/photograph.png';
+import icon_heart from '../img/upload/heart.png';
 
 import icon_twitter from '../img/upload/twitter.png';
 import icon_youtube from '../img/upload/youtube.png';
@@ -93,7 +95,7 @@ class UploadSNSDetail extends React.Component {
         
                     this.setState({
                         name: "Tweet-" + res.data.data.id ,
-                        description: base64.encode(json_desc),
+                        description: json_desc,
                         previewName: "Tweet-" + res.data.data.id
                     });
         
@@ -138,7 +140,7 @@ class UploadSNSDetail extends React.Component {
 
                     this.setState({
                         name: "Youtube-" + res.data.items[0].id,
-                        description: base64.encode(json_desc),
+                        description: json_desc,
                         previewName: "Youtube-" + res.data.items[0].id,
                         image_url: res.data.items[0].snippet.thumbnails.standard.url,
                     });
@@ -227,10 +229,12 @@ class UploadSNSDetail extends React.Component {
         console.log(newContractInstance.options.address); // instance with the new contract address
         this.state.contract_address = newContractInstance.options.address;
 
+        var description = BASE64.encode(document.getElementById("description").value);
+
         API.add_token({
             deployer: this.state.address,
             name: document.getElementById("name").value,
-            description: document.getElementById("description").value,
+            description: description,
             fee_percentage: document.getElementById("percentage").value,
             contract_address: newContractInstance.options.address,
             collection: this.state.selected_collection,
@@ -275,6 +279,7 @@ class UploadSNSDetail extends React.Component {
 
         var name = document.getElementById("name").value;
         var description = document.getElementById("description").value;
+        description = BASE64.encode(description);
         var percentage = document.getElementById("percentage").value;
         var copies = document.getElementById("copies").value;
 
@@ -329,7 +334,7 @@ class UploadSNSDetail extends React.Component {
 
         var metadata = {
             url: config.token_url + previewPaths[previewPaths.length - 1],
-            description: document.getElementById("description").value
+            description: BASE64.encode(document.getElementById("description").value)
         };
 
         NFT.methods.mintAll(metadata).send({from: this.state.address})
@@ -412,7 +417,11 @@ class UploadSNSDetail extends React.Component {
     }
 
     onNameChanged = event=>{
-        this.setState({previewName: event.target.value});
+        var title = document.getElementById("name").value;
+        title = title.replace(/"/g, "");
+        document.getElementById("name").value = title;
+
+        this.setState({previewName: title});
     }
 
     isElementEnabled(id) {
@@ -583,6 +592,7 @@ class UploadSNSDetail extends React.Component {
 
         var name = document.getElementById("name").value;
         var description = document.getElementById("description").value;
+        description = BASE64.encode(description);
         var preview_png = document.getElementById("preview_png").src;
         var copies = document.getElementById("copies").value;
         var fee_percentage = document.getElementById("percentage").value;
@@ -622,7 +632,7 @@ class UploadSNSDetail extends React.Component {
 
         var metadata = {
             url: config.token_url + previewPaths[previewPaths.length - 1],
-            description: document.getElementById("description").value,
+            description: description,
             name: name
         };
 
@@ -853,6 +863,9 @@ class UploadSNSDetail extends React.Component {
                                                                 break;
                                                             case 4: 
                                                                 collection_img = icon_sns;
+                                                                break;
+                                                            case 5:
+                                                                collection_img = icon_heart;
                                                                 break;
                                                         }
 

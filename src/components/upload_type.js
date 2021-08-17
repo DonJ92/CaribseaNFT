@@ -32,15 +32,15 @@ class UploadType extends React.Component {
 
                     <div className="upload-lead-row">
                         <div className="upload-lead-col">
-                            <div className="upload-lead-figure">
+                            {/* <div className="upload-lead-figure">
                                 <img src={upload_single} alt="" />
-                            </div>
+                            </div> */}
                             <a className="btn btn-center" href={config.host_url + "/upload/detail/" + CONST.token_type.SINGLE}><span className="txt">{t('Create Single')}</span></a>
                         </div>
                         <div className="upload-lead-col">
-                            <div className="upload-lead-figure">
+                            {/* <div className="upload-lead-figure">
                                 <img src={upload_multiple} alt="" />
-                            </div>
+                            </div> */}
                             <a className="btn btn-center btn-blue" href={config.host_url + "/upload/detail/" + CONST.token_type.MULTIPLE}><span className="txt">{t('Create Multiple')}</span></a>
                         </div>
                     </div>
